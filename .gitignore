@@ -1,3 +1,5 @@
 .venv/*
 *.csv
-
+*.png
+*.jpg
+.vscode/*

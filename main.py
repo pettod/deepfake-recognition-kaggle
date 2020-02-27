@@ -1,4 +1,5 @@
 import csv
+import cv2
 import face_recognition
 import numpy as np
 import os
@@ -25,10 +26,35 @@ def readTestVideoNames():
     return video_file_names
 
 
+def readFramesFromVideo(video):
+    frames = []
+    while(video.isOpened()):
+        is_readable, frame = video.read()
+        if is_readable:
+            frames.append(frame)
+        else:
+            break
+    return np.array(frames)
+
+
 def main():
     test_video_file_names = readTestVideoNames()
-    class_probabilities = np.random.rand(len(test_video_file_names))
-    writeSubmissionFile(test_video_file_names, class_probabilities)
+    video = cv2.VideoCapture(TEST_DATA_PATH + test_video_file_names[1])
+    frames = readFramesFromVideo(video)
+    print("Frames shape:", frames.shape)
+    number_of_frames = frames.shape[0]
+    for i in range(number_of_frames):
+        print("Frame {}/{}".format(i+1, number_of_frames), end="\r")
+        frame = frames[i]
+        faces_locations = face_recognition.face_locations(frame)
+        #hog_descriptor = cv2.HOGDescriptor()
+        for y1, x1, y2, x2 in faces_locations:
+            face = frame[y1:y2, x2:x1, :]
+            #cv2.imwrite(str(i)+".png", face)
+            #hog = hog_descriptor.compute(face)
+
+    #class_probabilities = np.random.rand(len(test_video_file_names))
+    #writeSubmissionFile(test_video_file_names, class_probabilities)
     
 
 main()
