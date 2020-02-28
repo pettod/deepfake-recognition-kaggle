@@ -6,13 +6,15 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 from skimage.feature import hog
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score
 
 
 LABEL_FILE_NAME = "metadata.json"
-FACES_PATH = "faces/"
 SUBMISSION_FILE_NAME = "submission.csv"
-TEST_DATA_PATH = "../input/deepfake-detection-challenge/test_videos/"
-TRAIN_DATA_PATH = "../input/deepfake-detection-challenge/test_videos/"
+TEST_DATA_PATH = "faces_development/"  #"../input/deepfake-detection-challenge/test_videos/"
+TRAIN_DATA_PATH = "faces_development/"
 
 
 def writeSubmissionFile(video_file_names, class_probabilities):
@@ -57,14 +59,16 @@ def cropFaces(test_video_file_names):
                 cv2.imwrite(str(j)+".png", face)
 
 
-def loadFaces():
+def loadFaces(path):
     videos = []
-    for directory_name, _, file_names in sorted(os.walk(FACES_PATH)):
-        video_frames = []
-        for frame_name in sorted(file_names):
-            video_frames.append(cv2.imread(directory_name + '/' + frame_name))
-        videos.append(video_frames)
-        yield video_frames
+    for directory_name, _, file_names in sorted(os.walk(path)):
+        if file_names != []:
+            video_frames = []
+            for frame_name in sorted(file_names):
+                video_frames.append(
+                    cv2.imread(directory_name + '/' + frame_name))
+            videos.append(video_frames)
+            yield video_frames
 
 
 def hogFeatureVector(
@@ -72,6 +76,7 @@ def hogFeatureVector(
         cells_per_block=(1, 1), plot_hog=False):
     video_histograms = []
     for i, video in enumerate(videos):
+        print("HOG, video {}".format(i+1), end="\r")
         face_histograms = []
         for j, face in enumerate(video):
             feature_vector, hog_image = hog(
@@ -107,17 +112,10 @@ def loadLabels():
                 labels.append(0)
             else:
                 labels.append(1)
-    return np.array(labels)
+    return labels
 
 
-def main():
-    test_video_file_names = readVideoNames(TEST_DATA_PATH)
-    #train_video_file_names = readVideoNames(TRAIN_DATA_PATH)
-    labels = loadLabels()
-    videos = loadFaces()
-    video_histograms = hogFeatureVector(videos, plot_hog=False)
-
-    # Visualize histograms
+def visualizeHistograms(video_histograms):
     for i in range(len(video_histograms)):
         mean_histogram = video_histograms[i][0]
         std_histogram = video_histograms[i][1]
@@ -129,6 +127,43 @@ def main():
         plt.hist(std_histogram)
         plt.title("STD")
     plt.show()
+
+
+def checkLabelsToRemove(labels, path):
+    i = 0
+    existing_labels = []
+    for directory_name, _, file_names in sorted(os.walk(path)):
+        if directory_name != path:
+            if len(os.listdir(directory_name)) > 0:
+                existing_labels.append(labels[i])
+            i += 1
+    return existing_labels
+
+
+def main():
+    test_video_file_names = readVideoNames(TEST_DATA_PATH)
+    labels = loadLabels()
+    labels = checkLabelsToRemove(labels, TRAIN_DATA_PATH)
+    videos = loadFaces(TRAIN_DATA_PATH)
+    video_histograms = hogFeatureVector(videos, plot_hog=False)
+    feature_vectors = np.array(video_histograms).reshape(
+        len(video_histograms), 16)
+    X_train, X_test, y_train, y_test = train_test_split(
+        feature_vectors, labels, test_size=0.33, random_state=42)
+
+    print("Training started")
+    model = RandomForestClassifier(max_depth=8, random_state=13)
+    model.fit(X_train, y_train)
+    y_preds = model.predict(X_test)
+    precision = accuracy_score(y_test, y_preds)
+    print("Precision:", precision)
+
+    videos = loadFaces(TEST_DATA_PATH)
+    video_histograms = hogFeatureVector(videos, plot_hog=False)
+    feature_vectors = np.array(video_histograms).reshape(
+        len(video_histograms), 16)
+    classes = model.predict(feature_vectors)
+    print("yes")
 
     #class_probabilities = np.random.rand(len(test_video_file_names))
     #writeSubmissionFile(test_video_file_names, class_probabilities)
