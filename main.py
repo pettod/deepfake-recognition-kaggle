@@ -1,15 +1,18 @@
 import csv
 import cv2
 import face_recognition
+import json
+import matplotlib.pyplot as plt
 import numpy as np
 import os
 from skimage.feature import hog
-import matplotlib.pyplot as plt
 
 
-TEST_DATA_PATH = "../input/deepfake-detection-challenge/test_videos/"
-SUBMISSION_FILE_NAME = "submission.csv"
+LABEL_FILE_NAME = "metadata.json"
 FACES_PATH = "faces/"
+SUBMISSION_FILE_NAME = "submission.csv"
+TEST_DATA_PATH = "../input/deepfake-detection-challenge/test_videos/"
+TRAIN_DATA_PATH = "../input/deepfake-detection-challenge/test_videos/"
 
 
 def writeSubmissionFile(video_file_names, class_probabilities):
@@ -21,9 +24,9 @@ def writeSubmissionFile(video_file_names, class_probabilities):
             writer.writerow([video_file_names[i], class_probabilities[i]])
 
 
-def readTestVideoNames():
+def readVideoNames(data_path):
     video_file_names = []
-    for directory_name, _, file_names in os.walk(TEST_DATA_PATH):
+    for directory_name, _, file_names in os.walk(data_path):
         for video_name in sorted(file_names):
             video_file_names.append(video_name)
     return video_file_names
@@ -56,7 +59,7 @@ def cropFaces(test_video_file_names):
 
 def loadFaces():
     videos = []
-    for directory_name, _, file_names in os.walk(FACES_PATH):
+    for directory_name, _, file_names in sorted(os.walk(FACES_PATH)):
         video_frames = []
         for frame_name in sorted(file_names):
             video_frames.append(cv2.imread(directory_name + '/' + frame_name))
@@ -95,8 +98,22 @@ def hogFeatureVector(
     return video_histograms
 
 
+def loadLabels():
+    labels = []
+    with open(LABEL_FILE_NAME) as labels_json:
+        labels_dict = json.load(labels_json)
+        for key, value in labels_dict.items():
+            if value["label"] == "FAKE":
+                labels.append(0)
+            else:
+                labels.append(1)
+    return np.array(labels)
+
+
 def main():
-    test_video_file_names = readTestVideoNames()
+    test_video_file_names = readVideoNames(TEST_DATA_PATH)
+    #train_video_file_names = readVideoNames(TRAIN_DATA_PATH)
+    labels = loadLabels()
     videos = loadFaces()
     video_histograms = hogFeatureVector(videos, plot_hog=False)
 
