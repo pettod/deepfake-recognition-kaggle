@@ -3,10 +3,13 @@ import cv2
 import face_recognition
 import numpy as np
 import os
+from skimage.feature import hog
+import matplotlib.pyplot as plt
 
 
 TEST_DATA_PATH = "../input/deepfake-detection-challenge/test_videos/"
 SUBMISSION_FILE_NAME = "submission.csv"
+FACES_PATH = "faces/"
 
 
 def writeSubmissionFile(video_file_names, class_probabilities):
@@ -37,24 +40,63 @@ def readFramesFromVideo(video):
     return np.array(frames)
 
 
+def cropFaces(test_video_file_names):
+    for i in range(len(test_video_file_names)):
+        video = cv2.VideoCapture(TEST_DATA_PATH + test_video_file_names[i])
+        frames = readFramesFromVideo(video)
+        number_of_frames = frames.shape[0]
+        for j in range(number_of_frames):
+            print("Frame {}/{}".format(j+1, number_of_frames), end="\r")
+            frame = frames[j]
+            faces_locations = face_recognition.face_locations(frame)
+            for y1, x1, y2, x2 in faces_locations:
+                face = frame[y1:y2, x2:x1, :]
+                cv2.imwrite(str(j)+".png", face)
+
+
+def loadFaces():
+    videos = []
+    for directory_name, _, file_names in os.walk(FACES_PATH):
+        video_frames = []
+        for frame_name in sorted(file_names):
+            video_frames.append(cv2.imread(directory_name + '/' + frame_name))
+        videos.append(video_frames)
+        yield video_frames
+
+
+def hogFeatureVector(
+        videos, orientations=8, pixels_per_cell=(16, 16),
+        cells_per_block=(1, 1), plot_hog=False):
+    video_feature_vectors = []
+    for i, video in enumerate(videos):
+        feature_vectors = []
+        for j, face in enumerate(video):
+            feature_vector, hog_image = hog(
+                face, orientations=orientations,
+                pixels_per_cell=pixels_per_cell,
+                cells_per_block=cells_per_block, visualize=True,
+                multichannel=True)
+            feature_vectors.append(feature_vector)
+
+            if plot_hog:
+                plt.subplot(131)
+                plt.imshow(cv2.cvtColor(face, cv2.COLOR_BGR2RGB))
+                plt.subplot(132)
+                plt.imshow(hog_image)
+                plt.subplot(133)
+                plt.hist(feature_vector, orientations)
+                plt.show()
+        video_feature_vectors.append(feature_vectors)
+        yield video_feature_vectors
+
+
 def main():
     test_video_file_names = readTestVideoNames()
-    video = cv2.VideoCapture(TEST_DATA_PATH + test_video_file_names[1])
-    frames = readFramesFromVideo(video)
-    print("Frames shape:", frames.shape)
-    number_of_frames = frames.shape[0]
-    for i in range(number_of_frames):
-        print("Frame {}/{}".format(i+1, number_of_frames), end="\r")
-        frame = frames[i]
-        faces_locations = face_recognition.face_locations(frame)
-        #hog_descriptor = cv2.HOGDescriptor()
-        for y1, x1, y2, x2 in faces_locations:
-            face = frame[y1:y2, x2:x1, :]
-            #cv2.imwrite(str(i)+".png", face)
-            #hog = hog_descriptor.compute(face)
+    videos = loadFaces()
+    feature_vectors = hogFeatureVector(videos, plot_hog=False)
 
     #class_probabilities = np.random.rand(len(test_video_file_names))
     #writeSubmissionFile(test_video_file_names, class_probabilities)
-    
+
 
 main()
