@@ -67,16 +67,17 @@ def loadFaces():
 def hogFeatureVector(
         videos, orientations=8, pixels_per_cell=(16, 16),
         cells_per_block=(1, 1), plot_hog=False):
-    video_feature_vectors = []
+    video_histograms = []
     for i, video in enumerate(videos):
-        feature_vectors = []
+        face_histograms = []
         for j, face in enumerate(video):
             feature_vector, hog_image = hog(
                 face, orientations=orientations,
                 pixels_per_cell=pixels_per_cell,
                 cells_per_block=cells_per_block, visualize=True,
                 multichannel=True)
-            feature_vectors.append(feature_vector)
+            histogram, _, _ = plt.hist(feature_vector, orientations)
+            face_histograms.append(histogram)
 
             if plot_hog:
                 plt.subplot(131)
@@ -86,14 +87,31 @@ def hogFeatureVector(
                 plt.subplot(133)
                 plt.hist(feature_vector, orientations)
                 plt.show()
-        video_feature_vectors.append(feature_vectors)
-        yield video_feature_vectors
+        if face_histograms != []:
+            histogram_array = np.array(face_histograms)
+            mean_histogram = np.mean(histogram_array, axis=0)
+            std_histogram = np.std(histogram_array, axis=0)
+            video_histograms.append([mean_histogram, std_histogram])
+    return video_histograms
 
 
 def main():
     test_video_file_names = readTestVideoNames()
     videos = loadFaces()
-    feature_vectors = hogFeatureVector(videos, plot_hog=False)
+    video_histograms = hogFeatureVector(videos, plot_hog=False)
+
+    # Visualize histograms
+    for i in range(len(video_histograms)):
+        mean_histogram = video_histograms[i][0]
+        std_histogram = video_histograms[i][1]
+        plt.figure(i)
+        plt.subplot(121)
+        plt.hist(mean_histogram)
+        plt.title("Mean")
+        plt.subplot(122)
+        plt.hist(std_histogram)
+        plt.title("STD")
+    plt.show()
 
     #class_probabilities = np.random.rand(len(test_video_file_names))
     #writeSubmissionFile(test_video_file_names, class_probabilities)
