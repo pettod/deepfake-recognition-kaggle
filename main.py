@@ -5,6 +5,7 @@ import json
 import matplotlib.pyplot as plt
 import numpy as np
 import os
+import pickle
 from skimage.feature import hog
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
@@ -140,8 +141,7 @@ def checkLabelsToRemove(labels, path):
     return existing_labels
 
 
-def main():
-    test_video_file_names = readVideoNames(TEST_DATA_PATH)
+def train():
     labels = loadLabels()
     labels = checkLabelsToRemove(labels, TRAIN_DATA_PATH)
     videos = loadFaces(TRAIN_DATA_PATH)
@@ -157,16 +157,24 @@ def main():
     y_preds = model.predict(X_test)
     precision = accuracy_score(y_test, y_preds)
     print("Precision:", precision)
+    pickle.dump(model, open("models/model.sav", 'wb')) 
 
+
+def test():
+    model = pickle.load(open("models/model.sav", 'rb'))
+    test_video_file_names = readVideoNames(TEST_DATA_PATH)
     videos = loadFaces(TEST_DATA_PATH)
     video_histograms = hogFeatureVector(videos, plot_hog=False)
     feature_vectors = np.array(video_histograms).reshape(
         len(video_histograms), 16)
     classes = model.predict(feature_vectors)
-    print("yes")
+    class_probabilities = np.random.rand(len(test_video_file_names))
+    writeSubmissionFile(test_video_file_names, classes)
 
-    #class_probabilities = np.random.rand(len(test_video_file_names))
-    #writeSubmissionFile(test_video_file_names, class_probabilities)
+
+def main():
+    train()
+    #test()
 
 
 main()
