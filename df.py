@@ -8,14 +8,14 @@ from tensorflow.python.client import device_lib
 
 print(device_lib.list_local_devices())
 detector = MTCNN()
-files = os.listdir("test_videos/")
+files = os.listdir("../test_videos/")
 faces = []
 
 
 for file in files:
-    VIDEO_DIR = "test_videos/video_%s" % (file)
-    FACE_DIR = "faces/video_%s" % (file)
-
+    VIDEO_DIR = "../test_videos/video_%s" % (file)
+    FACE_DIR = "../faces/video_%s" % (file)
+    
     cnt = 1
     os.mkdir(FACE_DIR)
     cap = cv2.VideoCapture(VIDEO_DIR)
@@ -23,8 +23,8 @@ for file in files:
     #for file in files:
         print("Video #%s Frame #%03d" % (file, cnt))
         ret, img = cap.read()
-        #if(ret == False):
-        #    break
+        if not ret:
+            break
         #img = cv2.imread(file) 
         #plt.imshow(img)
         if cv2.waitKey(1) & 0xFF == ord('q'):
