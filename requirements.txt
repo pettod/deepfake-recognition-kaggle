@@ -3,3 +3,4 @@ face-recognition==1.2.3
 numpy==1.18.1
 tensoflow-gpu
 mtcnn
+keras
