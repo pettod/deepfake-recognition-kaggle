@@ -15,7 +15,7 @@ from sklearn.metrics import accuracy_score
 LABEL_FILE_NAME = "metadata.json"
 SUBMISSION_FILE_NAME = "submission.csv"
 TEST_DATA_PATH = "faces_development/"  #"../input/deepfake-detection-challenge/test_videos/"
-TRAIN_DATA_PATH = "faces_development/"
+TRAIN_DATA_PATH = "faces/"
 
 
 def writeSubmissionFile(video_file_names, class_probabilities):
@@ -156,8 +156,23 @@ def train():
     model.fit(X_train, y_train)
     y_preds = model.predict(X_test)
     precision = accuracy_score(y_test, y_preds)
+    evaluation_score = logLoss(y_test, y_preds)
     print("Precision:", precision)
+    print("Evaluation score:", evaluation_score)
     pickle.dump(model, open("models/model.sav", 'wb')) 
+
+
+def logLoss(y_pred, y_true):
+    if len(y_pred) != len(y_true):
+        Exception("No same length")
+    sum_term = 0
+    eps = 1e-15
+    n = len(y_pred)
+    for i in range(n):
+        y_p = y_pred[i]
+        y_t = y_true[i]
+        sum_term += y_t * np.log(y_p + eps) + (1 - y_t) * np.log(1 - y_p + eps)
+    return -1 * sum_term / n
 
 
 def test():
