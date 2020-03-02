@@ -4,3 +4,4 @@ numpy
 tensoflow-gpu
 mtcnn
 keras
+scikit-learn

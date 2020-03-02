@@ -1,6 +1,5 @@
 import csv
 import cv2
-import face_recognition
 import json
 import matplotlib.pyplot as plt
 import numpy as np
@@ -10,12 +9,17 @@ from skimage.feature import hog
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
+from joblib import Parallel, delayed
+import multiprocessing
+num_cores = multiprocessing.cpu_count()
 
 
 LABEL_FILE_NAME = "metadata.json"
 SUBMISSION_FILE_NAME = "submission.csv"
-TEST_DATA_PATH = "faces_development/"  #"../input/deepfake-detection-challenge/test_videos/"
-TRAIN_DATA_PATH = "faces/"
+TEST_DATA_PATH = "../../Deepfake/faces_test_videos/"  #"../input/deepfake-detection-challenge/test_videos/"
+TRAIN_DATA_PATH = "../../Deepfake/faces_train_sample_videos/"
+TRAIN_SIZE = 400
+FRAME_CNT = 400
 
 
 def writeSubmissionFile(video_file_names, class_probabilities):
@@ -59,17 +63,26 @@ def cropFaces(test_video_file_names):
                 face = frame[y1:y2, x2:x1, :]
                 cv2.imwrite(str(j)+".png", face)
 
-
 def loadFaces(path):
-    videos = []
-    for directory_name, _, file_names in sorted(os.walk(path)):
-        if file_names != []:
-            video_frames = []
-            for frame_name in sorted(file_names):
-                video_frames.append(
-                    cv2.imread(directory_name + '/' + frame_name))
-            videos.append(video_frames)
-            yield video_frames
+    for i in range(1, TRAIN_SIZE+1):
+        files_png = os.listdir(path + "video_%03d.mp4/PNG/" % i)
+        video_frames = []
+        
+        for j in range(len(files_png[0:min(len(files_png), FRAME_CNT)])):
+            file = files_png[j]
+            video_frames.append(cv2.imread(path + "video_%03d.mp4/PNG/%s" % (i, file)))
+            
+        yield video_frames
+        #videos.append(video_frames)
+    #return videos
+    #for directory_name, _, file_names in sorted(os.walk(path)):
+    #    if file_names != []:
+    #        video_frames = []
+    #        for frame_name in sorted(file_names):
+    #            video_frames.append(
+    #                cv2.imread(directory_name + '/' + frame_name))
+    #        videos.append(video_frames)
+    #        yield video_frames
 
 
 def hogFeatureVector(
@@ -79,23 +92,36 @@ def hogFeatureVector(
     for i, video in enumerate(videos):
         print("HOG, video {}".format(i+1), end="\r")
         face_histograms = []
-        for j, face in enumerate(video):
-            feature_vector, hog_image = hog(
+        # for j, face in enumerate(video):
+        #     if(face is None):
+        #         continue
+        #     feature_vector, hog_image = hog(
+        #         face, orientations=orientations,
+        #         pixels_per_cell=pixels_per_cell,
+        #         cells_per_block=cells_per_block, visualize=True,
+        #         multichannel=True)
+        #     histogram, _, _ = plt.hist(feature_vector, orientations)
+        #     face_histograms.append(histogram)
+
+            # if plot_hog:
+            #     plt.subplot(131)
+            #     plt.imshow(cv2.cvtColor(face, cv2.COLOR_BGR2RGB))
+            #     plt.subplot(132)
+            #     plt.imshow(hog_image)
+            #     plt.subplot(133)
+            #     plt.hist(feature_vector, orientations)
+            #     plt.show()
+        def parallel_hog(face):
+            if(face is None):
+                return None
+            feature_vector, _ = hog(
                 face, orientations=orientations,
                 pixels_per_cell=pixels_per_cell,
                 cells_per_block=cells_per_block, visualize=True,
                 multichannel=True)
             histogram, _, _ = plt.hist(feature_vector, orientations)
-            face_histograms.append(histogram)
-
-            if plot_hog:
-                plt.subplot(131)
-                plt.imshow(cv2.cvtColor(face, cv2.COLOR_BGR2RGB))
-                plt.subplot(132)
-                plt.imshow(hog_image)
-                plt.subplot(133)
-                plt.hist(feature_vector, orientations)
-                plt.show()
+            return histogram
+        face_histograms = Parallel(n_jobs=num_cores)(delayed(parallel_hog)(face) for face in video)
         if face_histograms != []:
             histogram_array = np.array(face_histograms)
             mean_histogram = np.mean(histogram_array, axis=0)
@@ -109,7 +135,7 @@ def loadLabels():
     with open(LABEL_FILE_NAME) as labels_json:
         labels_dict = json.load(labels_json)
         for key, value in labels_dict.items():
-            if value["label"] == "FAKE":
+            if value == "FAKE":
                 labels.append(0)
             else:
                 labels.append(1)
@@ -131,18 +157,27 @@ def visualizeHistograms(video_histograms):
 
 
 def checkLabelsToRemove(labels, path):
-    i = 0
     existing_labels = []
-    for directory_name, _, file_names in sorted(os.walk(path)):
-        if directory_name != path:
-            if len(os.listdir(directory_name)) > 0:
-                existing_labels.append(labels[i])
-            i += 1
+    for i in range(1, len(labels)+1):
+        pngs = os.listdir(TRAIN_DATA_PATH + 'video_%03d.mp4/PNG' % i )
+        if(len(pngs) == 0):
+            print("CYKA BLAT: %03d" % i)
+            continue
+        existing_labels.append(labels[i-1])
+        
+
+    # for directory_name, _, file_names in sorted(os.walk(path)):
+    #     if directory_name != path:
+    #         if len(os.listdir(directory_name)) > 0:
+    #         else:
+    #             print(i)
+    #         i += 1
+    print("%03d LABELS EXIST " % len(existing_labels))
     return existing_labels
 
 
 def train():
-    labels = loadLabels()
+    labels = loadLabels()[0:TRAIN_SIZE]
     labels = checkLabelsToRemove(labels, TRAIN_DATA_PATH)
     videos = loadFaces(TRAIN_DATA_PATH)
     video_histograms = hogFeatureVector(videos, plot_hog=False)
@@ -187,7 +222,7 @@ def test():
     writeSubmissionFile(test_video_file_names, classes)
 
 
-def main():
+def main():    
     train()
     #test()
 
