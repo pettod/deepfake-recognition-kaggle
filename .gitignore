@@ -5,3 +5,4 @@
 .vscode/*
 *.json
 *.sav
+models/*

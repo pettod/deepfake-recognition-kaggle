@@ -16,8 +16,8 @@ num_cores = multiprocessing.cpu_count()
 
 LABEL_FILE_NAME = "metadata.json"
 SUBMISSION_FILE_NAME = "submission.csv"
-TEST_DATA_PATH = "../../Deepfake/faces_test_videos/"  #"../input/deepfake-detection-challenge/test_videos/"
-TRAIN_DATA_PATH = "../../Deepfake/faces_train_sample_videos/"
+TEST_DATA_PATH = "../cropped_faces/deepfake/faces_test_videos/"  #"../input/deepfake-detection-challenge/test_videos/"
+TRAIN_DATA_PATH = "../cropped_faces/deepfake/faces_train_videos/"
 TRAIN_SIZE = 400
 FRAME_CNT = 400
 
@@ -67,11 +67,11 @@ def loadFaces(path):
     for i in range(1, TRAIN_SIZE+1):
         files_png = os.listdir(path + "video_%03d.mp4/PNG/" % i)
         video_frames = []
-        
+
         for j in range(len(files_png[0:min(len(files_png), FRAME_CNT)])):
             file = files_png[j]
             video_frames.append(cv2.imread(path + "video_%03d.mp4/PNG/%s" % (i, file)))
-            
+
         yield video_frames
         #videos.append(video_frames)
     #return videos
@@ -88,54 +88,34 @@ def loadFaces(path):
 def hogFeatureVector(
         videos, orientations=8, pixels_per_cell=(16, 16),
         cells_per_block=(1, 1), plot_hog=False):
-    video_histograms = []
-    for i, video in enumerate(videos):
-        print("HOG, video {}".format(i+1), end="\r")
+    def parallel_hist(video):
+        print("HOG, video")
         face_histograms = []
-        # for j, face in enumerate(video):
-        #     if(face is None):
-        #         continue
-        #     feature_vector, hog_image = hog(
-        #         face, orientations=orientations,
-        #         pixels_per_cell=pixels_per_cell,
-        #         cells_per_block=cells_per_block, visualize=True,
-        #         multichannel=True)
-        #     histogram, _, _ = plt.hist(feature_vector, orientations)
-        #     face_histograms.append(histogram)
-
-            # if plot_hog:
-            #     plt.subplot(131)
-            #     plt.imshow(cv2.cvtColor(face, cv2.COLOR_BGR2RGB))
-            #     plt.subplot(132)
-            #     plt.imshow(hog_image)
-            #     plt.subplot(133)
-            #     plt.hist(feature_vector, orientations)
-            #     plt.show()
-        def parallel_hog(face):
+        for face in video:
             if(face is None):
-                return None
-            feature_vector, _ = hog(
+                continue
+            feature_vector, hog_image = hog(
                 face, orientations=orientations,
                 pixels_per_cell=pixels_per_cell,
                 cells_per_block=cells_per_block, visualize=True,
                 multichannel=True)
             histogram, _, _ = plt.hist(feature_vector, orientations)
-            return histogram
-        face_histograms = Parallel(n_jobs=num_cores)(delayed(parallel_hog)(face) for face in video)
+            face_histograms.append(histogram)
         if face_histograms != []:
             histogram_array = np.array(face_histograms)
             mean_histogram = np.mean(histogram_array, axis=0)
             std_histogram = np.std(histogram_array, axis=0)
-            video_histograms.append([mean_histogram, std_histogram])
+            return [mean_histogram, std_histogram]
+        return [range(8), range(8)]
+    video_histograms = Parallel(n_jobs=num_cores)(delayed(parallel_hist)(video) for video in videos)
     return video_histograms
-
 
 def loadLabels():
     labels = []
     with open(LABEL_FILE_NAME) as labels_json:
         labels_dict = json.load(labels_json)
         for key, value in labels_dict.items():
-            if value == "FAKE":
+            if value["label"] == "FAKE":
                 labels.append(0)
             else:
                 labels.append(1)
@@ -176,13 +156,17 @@ def checkLabelsToRemove(labels, path):
     return existing_labels
 
 
-def train():
+def train(feature_path='models/feature_train.dat', save_feature_path='models/feature_train.dat'):
     labels = loadLabels()[0:TRAIN_SIZE]
-    labels = checkLabelsToRemove(labels, TRAIN_DATA_PATH)
+    #labels = checkLabelsToRemove(labels, TRAIN_DATA_PATH)
     videos = loadFaces(TRAIN_DATA_PATH)
-    video_histograms = hogFeatureVector(videos, plot_hog=False)
-    feature_vectors = np.array(video_histograms).reshape(
-        len(video_histograms), 16)
+    if(feature_path is None):
+        video_histograms = hogFeatureVector(videos, plot_hog=False)
+        feature_vectors = np.array(video_histograms).reshape(
+            len(video_histograms), 16)
+        pickle.dump(feature_vectors, open(save_feature_path, "wb"))
+    else:
+        feature_vectors = pickle.load(open(feature_path, "rb"))
     X_train, X_test, y_train, y_test = train_test_split(
         feature_vectors, labels, test_size=0.33, random_state=42)
 
@@ -190,6 +174,7 @@ def train():
     model = RandomForestClassifier(max_depth=8, random_state=13)
     model.fit(X_train, y_train)
     y_preds = model.predict(X_test)
+    print(labels)
     precision = accuracy_score(y_test, y_preds)
     evaluation_score = logLoss(y_test, y_preds)
     print("Precision:", precision)
@@ -210,21 +195,25 @@ def logLoss(y_pred, y_true):
     return -1 * sum_term / n
 
 
-def test():
+def test(feature_path='models/feature_test.dat', save_feature_path='models/feature_test.dat'):
     model = pickle.load(open("models/model.sav", 'rb'))
     test_video_file_names = readVideoNames(TEST_DATA_PATH)
     videos = loadFaces(TEST_DATA_PATH)
-    video_histograms = hogFeatureVector(videos, plot_hog=False)
-    feature_vectors = np.array(video_histograms).reshape(
-        len(video_histograms), 16)
+    if(feature_path is None):
+        video_histograms = hogFeatureVector(videos, plot_hog=False)
+        feature_vectors = np.array(video_histograms).reshape(
+            len(video_histograms), 16)
+        pickle.dump(feature_vectors, open(save_feature_path, "wb"))
+    else:
+        feature_vectors = pickle.load(open(feature_path, "rb"))
     classes = model.predict(feature_vectors)
     class_probabilities = np.random.rand(len(test_video_file_names))
     writeSubmissionFile(test_video_file_names, classes)
 
 
 def main():    
-    train()
-    #test()
+    train(None)
+    #test(None)
 
 
 main()
