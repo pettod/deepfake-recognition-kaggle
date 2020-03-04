@@ -16,9 +16,10 @@ num_cores = multiprocessing.cpu_count()
 
 LABEL_FILE_NAME = "metadata.json"
 SUBMISSION_FILE_NAME = "submission.csv"
-TEST_DATA_PATH = "../cropped_faces/faces_test_videos/"  #"../input/deepfake-detection-challenge/test_videos/"
-TRAIN_DATA_PATH = "../cropped_faces/faces_train_sample_videos/"
+TEST_DATA_PATH = "../cropped_faces/deepfake/faces_test_videos/"  #"../input/deepfake-detection-challenge/test_videos/"
+TRAIN_DATA_PATH = "../cropped_faces/deepfake/faces_train_videos/"
 TRAIN_SIZE = 400
+TEST_SIZE = 400
 FRAME_CNT = 400
 
 
@@ -28,10 +29,11 @@ def writeSubmissionFile(video_file_names, class_probabilities):
         writer = csv.writer(submission_file, delimiter=',')
         writer.writerow(["filename", "label"])
         real_cnt = 0
-        for i in range(len(video_file_names)):
-            real_cnt += 1
+        for i in range(len(video_file_names[0:TRAIN_SIZE])):
+            if(class_probabilities[i] == "1"):
+                real_cnt+=1
             writer.writerow([video_file_names[i][6:], class_probabilities[i]])
-        print("REALS: %d" % real_cnt)
+        print("REALES: %d" % real_cnt)
 
 def readVideoNames(data_path):
     
@@ -73,7 +75,7 @@ def loadFaces(path):
 
         for j in range(len(files_png[0:min(len(files_png), FRAME_CNT)])):
             file = files_png[j]
-            video_frames.append(cv2.imread(path + dir + "/" + file))
+            video_frames.append(cv2.imread(path + dir + "/PNG/" + file))
 
         yield video_frames
         #videos.append(video_frames)
@@ -113,11 +115,12 @@ def hogFeatureVector(
     video_histograms = Parallel(n_jobs=num_cores)(delayed(parallel_hist)(video) for video in videos)
     return video_histograms
 
-def loadLabels():
+def loadLabels(path):
     labels = []
     with open(LABEL_FILE_NAME) as labels_json:
         labels_dict = json.load(labels_json)
         for key, value in labels_dict.items():
+            #if(labels_json[i]["label"] == "FAKE"):
             if value["label"] == "FAKE":
                 labels.append(0)
             else:
@@ -160,18 +163,19 @@ def checkLabelsToRemove(labels, path):
 
 
 def train(feature_path='models/feature_train.dat', save_feature_path='models/feature_train.dat'):
-    labels = loadLabels()[0:TRAIN_SIZE]
+    labels = loadLabels(TRAIN_DATA_PATH)[0:TRAIN_SIZE]
     #labels = checkLabelsToRemove(labels, TRAIN_DATA_PATH)
     videos = loadFaces(TRAIN_DATA_PATH)
     if(feature_path is None):
         video_histograms = hogFeatureVector(videos, plot_hog=False)
+        print(video_histograms)
         feature_vectors = np.array(video_histograms).reshape(
             len(video_histograms), 16)
         pickle.dump(feature_vectors, open(save_feature_path, "wb"))
     else:
         feature_vectors = pickle.load(open(feature_path, "rb"))
     X_train, X_test, y_train, y_test = train_test_split(
-        feature_vectors, labels, test_size=0.33, random_state=42)
+        feature_vectors, labels, test_size=0.2, random_state=42)
 
     print("Training started")
     model = RandomForestClassifier(max_depth=8, random_state=13)
@@ -209,7 +213,7 @@ def test(feature_path='models/feature_test.dat', save_feature_path='models/featu
         pickle.dump(feature_vectors, open(save_feature_path, "wb"))
     else:
         feature_vectors = pickle.load(open(feature_path, "rb"))
-    classes = model.predict(feature_vectors)
+    classes = model.predict(feature_vectors[0:TEST_SIZE])
     class_probabilities = np.random.rand(len(test_video_file_names))
     writeSubmissionFile(test_video_file_names, classes)
 
