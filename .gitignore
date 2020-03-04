@@ -6,3 +6,4 @@
 *.json
 *.sav
 models/*
+*.out

@@ -1,10 +1,10 @@
 import csv
 import cv2
 import json
-import matplotlib.pyplot as plt
 import numpy as np
 import os
 import pickle
+import matplotlib.pyplot as plt
 from skimage.feature import hog
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
@@ -16,8 +16,8 @@ num_cores = multiprocessing.cpu_count()
 
 LABEL_FILE_NAME = "metadata.json"
 SUBMISSION_FILE_NAME = "submission.csv"
-TEST_DATA_PATH = "../cropped_faces/deepfake/faces_test_videos/"  #"../input/deepfake-detection-challenge/test_videos/"
-TRAIN_DATA_PATH = "../cropped_faces/deepfake/faces_train_videos/"
+TEST_DATA_PATH = "../cropped_faces/faces_test_videos/"  #"../input/deepfake-detection-challenge/test_videos/"
+TRAIN_DATA_PATH = "../cropped_faces/faces_train_sample_videos/"
 TRAIN_SIZE = 400
 FRAME_CNT = 400
 
@@ -25,13 +25,16 @@ FRAME_CNT = 400
 def writeSubmissionFile(video_file_names, class_probabilities):
     with open(SUBMISSION_FILE_NAME, "w+") as submission_file:
         class_probabilities = [str(element) for element in class_probabilities]
-        writer = csv.writer(submission_file, delimiter=';', quoting=csv.QUOTE_ALL)
+        writer = csv.writer(submission_file, delimiter=',')
         writer.writerow(["filename", "label"])
+        real_cnt = 0
         for i in range(len(video_file_names)):
-            writer.writerow([video_file_names[i], class_probabilities[i]])
-
+            real_cnt += 1
+            writer.writerow([video_file_names[i][6:], class_probabilities[i]])
+        print("REALS: %d" % real_cnt)
 
 def readVideoNames(data_path):
+    
     video_file_names = []
     for directory_name, _, file_names in os.walk(data_path):
         for video_name in sorted(file_names):
@@ -64,13 +67,13 @@ def cropFaces(test_video_file_names):
                 cv2.imwrite(str(j)+".png", face)
 
 def loadFaces(path):
-    for i in range(1, TRAIN_SIZE+1):
-        files_png = os.listdir(path + "video_%03d.mp4/PNG/" % i)
+    for dir in sorted(os.listdir(path)): #range(1, TRAIN_SIZE+1):
+        files_png = os.listdir(path + dir + '/' + 'PNG/')
         video_frames = []
 
         for j in range(len(files_png[0:min(len(files_png), FRAME_CNT)])):
             file = files_png[j]
-            video_frames.append(cv2.imread(path + "video_%03d.mp4/PNG/%s" % (i, file)))
+            video_frames.append(cv2.imread(path + dir + "/" + file))
 
         yield video_frames
         #videos.append(video_frames)
@@ -122,18 +125,18 @@ def loadLabels():
     return labels
 
 
-def visualizeHistograms(video_histograms):
-    for i in range(len(video_histograms)):
-        mean_histogram = video_histograms[i][0]
-        std_histogram = video_histograms[i][1]
-        plt.figure(i)
-        plt.subplot(121)
-        plt.hist(mean_histogram)
-        plt.title("Mean")
-        plt.subplot(122)
-        plt.hist(std_histogram)
-        plt.title("STD")
-    plt.show()
+#def visualizeHistograms(video_histograms):
+#    for i in range(len(video_histograms)):
+#        mean_histogram = video_histograms[i][0]
+#        std_histogram = video_histograms[i][1]
+#        plt.figure(i)
+#        plt.subplot(121)
+#        plt.hist(mean_histogram)
+#        plt.title("Mean")
+#        plt.subplot(122)
+#        plt.hist(std_histogram)
+#        plt.title("STD")
+#    plt.show()
 
 
 def checkLabelsToRemove(labels, path):
@@ -197,7 +200,7 @@ def logLoss(y_pred, y_true):
 
 def test(feature_path='models/feature_test.dat', save_feature_path='models/feature_test.dat'):
     model = pickle.load(open("models/model.sav", 'rb'))
-    test_video_file_names = readVideoNames(TEST_DATA_PATH)
+    test_video_file_names = sorted(os.listdir(TEST_DATA_PATH)) #readVideoNames(TEST_DATA_PATH)
     videos = loadFaces(TEST_DATA_PATH)
     if(feature_path is None):
         video_histograms = hogFeatureVector(videos, plot_hog=False)
@@ -213,7 +216,7 @@ def test(feature_path='models/feature_test.dat', save_feature_path='models/featu
 
 def main():    
     train(None)
-    #test(None)
+    test(None)
 
 
 main()
