@@ -8,7 +8,7 @@ from keras.optimizers import Adam
 from keras.preprocessing import image
 
 
-DATA_DIR = "data"
+DATA_DIR = "../cropped_faces/resnet_data"
 TRAIN_DIR = os.path.join(DATA_DIR, "train")
 VALID_DIR = os.path.join(DATA_DIR, "valid")
 SIZE = (224, 224)
@@ -40,7 +40,7 @@ def main():
     classes = list(iter(batches.class_indices))
     model.layers.pop()
     for layer in model.layers:
-        layer.trainable=False
+        layer.trainable = False
     last = model.layers[-1].output
     x = Dense(len(classes), activation="softmax")(last)
     finetuned_model = Model(model.input, x)
