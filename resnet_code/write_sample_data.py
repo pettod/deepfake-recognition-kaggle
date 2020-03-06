@@ -6,14 +6,15 @@ import os
 import random
 
 
-NUMBER_OF_RANDOM_FACES = 3
 LABEL_FILE_NAME = "metadata.json"
+NUMBER_OF_RANDOM_FACES = 3
 SAMPLE_SIZE = (224, 224)
+SAVE_TYPE = 0  # 0: ".png", 1: ".npy"
+START_VIDEO_INDEX = 0
 TARGET_PATH_FAKE = "../cropped_faces/resnet_data/train/fake/"
 TARGET_PATH_REAL = "../cropped_faces/resnet_data/train/real/"
 TRAIN_DATA_PATH = "../cropped_faces/deepfake/faces_train_videos/"
-SAVE_TYPE = 0  # 0: ".png", 1: ".npy"
-START_VIDEO_INDEX = 0
+TRANSFORM_TO_GRAY = False
 
 
 def cropSquareImage(image):
@@ -48,12 +49,15 @@ def pickRandomFrames(video_frames):
     random_frames = []
     for i in random_frame_indices:
         random_frames.append(video_frames[i])
-    random_frames = np.swapaxes(np.swapaxes(
-        np.array(random_frames), 0, 2), 0, 1)
+    if TRANSFORM_TO_GRAY:
+        random_frames = np.swapaxes(np.swapaxes(
+            np.array(random_frames), 0, 2), 0, 1)
+    else:
+        random_frames = np.array(random_frames)
     return random_frames
 
 
-def readFramesFromVideo(video_frames_path, transform_to_gray=True):
+def readFramesFromVideo(video_frames_path):
     video_frames = []
     frame_names = sorted(os.listdir(video_frames_path))
 
@@ -69,10 +73,11 @@ def readFramesFromVideo(video_frames_path, transform_to_gray=True):
             interpolation=cv2.INTER_CUBIC)
 
         # Transform image to gray scale
-        if transform_to_gray:
+        if TRANSFORM_TO_GRAY:
             image = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
-            image[image < 0] = 0
-            image[image > 1] = 1
+
+        image[image < 0] = 0
+        image[image > 1] = 1
         video_frames.append(image)
     return video_frames
 
@@ -92,6 +97,8 @@ def saveArray(
 
 def main():
     labels = loadLabels()
+
+    # Create function pointers to save file and corresponding file formats
     save_functions = [plt.imsave, np.save]
     save_file_types = [".png", ".npy"]
 
@@ -109,8 +116,15 @@ def main():
         # Save frames
         if len(video_frames) >= NUMBER_OF_RANDOM_FACES:
             random_frames = pickRandomFrames(video_frames)
-            saveArray(
-                random_frames, labels[i], i+1, save_functions, save_file_types)
+            if len(random_frames.shape) == 3:
+                saveArray(
+                    random_frames, labels[i], i+1, save_functions,
+                    save_file_types)
+            else:
+                for j, frame in enumerate(random_frames):
+                    saveArray(
+                        frame, labels[i], str(i+1) + '_' + str(j+1),
+                        save_functions, save_file_types)
 
     print()
 
