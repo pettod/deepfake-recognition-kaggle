@@ -2,11 +2,13 @@ import math, json, os, sys
 import tensorflow as tf
 import keras
 from keras.callbacks import EarlyStopping, ModelCheckpoint
-from keras.layers import Dense, Flatten, Input
+from keras.layers import Dense, Flatten, Input, Conv2D, \
+    BatchNormalization, Activation, AveragePooling2D, Input
 from keras.models import Model
 from keras.optimizers import Adam
 from keras.preprocessing import image
 import numpy as np
+from keras.regularizers import l2
 
 DATA_DIR = "../cropped_faces/resnet_data"
 TRAIN_DIR = DATA_DIR + "/train"
@@ -14,6 +16,75 @@ VALID_DIR = DATA_DIR + "/train"
 SIZE = (224, 224)
 BATCH_SIZE = 4
 
+
+def lr_schedule(epoch):
+    """Learning Rate Schedule
+
+    Learning rate is scheduled to be reduced after 80, 120, 160, 180 epochs.
+    Called automatically every epoch as part of callbacks during training.
+
+    # Arguments
+        epoch (int): The number of epochs
+
+    # Returns
+        lr (float32): learning rate
+    """
+    lr = 1e-3
+    if epoch > 180:
+        lr *= 0.5e-3
+    elif epoch > 160:
+        lr *= 1e-3
+    elif epoch > 120:
+        lr *= 1e-2
+    elif epoch > 80:
+        lr *= 1e-1
+    print('Learning rate: ', lr)
+    return lr
+
+
+def resnet_layer(inputs,
+                 num_filters=16,
+                 kernel_size=3,
+                 strides=1,
+                 activation='relu',
+                 batch_normalization=True,
+                 conv_first=True):
+    """2D Convolution-Batch Normalization-Activation stack builder
+
+    # Arguments
+        inputs (tensor): input tensor from input image or previous layer
+        num_filters (int): Conv2D number of filters
+        kernel_size (int): Conv2D square kernel dimensions
+        strides (int): Conv2D square stride dimensions
+        activation (string): activation name
+        batch_normalization (bool): whether to include batch normalization
+        conv_first (bool): conv-bn-activation (True) or
+            bn-activation-conv (False)
+
+    # Returns
+        x (tensor): tensor as input to the next layer
+    """
+    conv = Conv2D(num_filters,
+                  kernel_size=kernel_size,
+                  strides=strides,
+                  padding='same',
+                  kernel_initializer='he_normal',
+                  kernel_regularizer=l2(1e-4))
+
+    x = inputs
+    if conv_first:
+        x = conv(x)
+        if batch_normalization:
+            x = BatchNormalization()(x)
+        if activation is not None:
+            x = Activation(activation)(x)
+    else:
+        if batch_normalization:
+            x = BatchNormalization()(x)
+        if activation is not None:
+            x = Activation(activation)(x)
+        x = conv(x)
+    return x
 
 def resnet_v2(input_shape, depth, num_classes=10):
     """ResNet Version 2 Model builder [b]
@@ -126,15 +197,15 @@ def main():
             horizontal_flip=True, vertical_flip=True)
 
         batches = gen.flow_from_directory(
-            TRAIN_DIR, target_size=SIZE, class_mode="binary", shuffle=True,
+            TRAIN_DIR, target_size=SIZE, class_mode="categorical", shuffle=True,
             batch_size=BATCH_SIZE)
         val_batches = val_gen.flow_from_directory(
-            VALID_DIR, target_size=SIZE, class_mode="binary", shuffle=True,
+            VALID_DIR, target_size=SIZE, class_mode="categorical", shuffle=True,
             batch_size=BATCH_SIZE)
-        input_shape = batches.next()[0].shape
+        a = batches.next()
         model = keras.applications.resnet50.ResNet50(weights=None, classes=2)
-
-        finetuned_model = resnet_v2(batches, 56, num_classes=2)
+        input_shape = tuple(list(SIZE) + [3])
+        finetuned_model = resnet_v2(input_shape, 56, num_classes=2)
         finetuned_model.compile(
             optimizer=Adam(lr=0.0001), loss="binary_crossentropy",
             metrics=["accuracy"])
