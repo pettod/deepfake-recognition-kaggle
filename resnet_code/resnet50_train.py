@@ -9,12 +9,12 @@ import tensorflow as tf
 
 
 BATCH_SIZE = 16
-DATA_DIR = "../cropped_faces/resnet_data"
+DATA_DIRECTORY = "../cropped_faces/resnet_data"
 EPOCHS = 1000
 IMAGE_SIZE = (224, 224)
 LEARNING_RATE = 0.0001
-TRAIN_DIR = DATA_DIR + "/train"
-VALID_DIR = DATA_DIR + "/train"
+TRAIN_DIRECTORY = DATA_DIRECTORY + "/train"
+VALIDATION_DIRECTORY = DATA_DIRECTORY + "/train"
 
 
 def getNumberOfSteps(data_directory, batch_size):
@@ -37,9 +37,10 @@ def main():
     with tf.device("/device:GPU:0"):
 
         # Load batch generators
-        train_batches = getBatchGenerator(TRAIN_DIR, IMAGE_SIZE, BATCH_SIZE)
+        train_batches = getBatchGenerator(
+            TRAIN_DIRECTORY, IMAGE_SIZE, BATCH_SIZE)
         validation_batches = getBatchGenerator(
-            VALID_DIR, IMAGE_SIZE, BATCH_SIZE, True, True)
+            VALIDATION_DIRECTORY, IMAGE_SIZE, BATCH_SIZE, True, True)
 
         # Create model
         model = keras.applications.resnet50.ResNet50(weights=None, classes=2)
@@ -53,11 +54,12 @@ def main():
             "resnet50_best.h5", verbose=1, save_best_only=True)
         model.fit_generator(
             train_batches,
-            steps_per_epoch=getNumberOfSteps(TRAIN_DIR, BATCH_SIZE),
+            steps_per_epoch=getNumberOfSteps(TRAIN_DIRECTORY, BATCH_SIZE),
             epochs=EPOCHS,
             callbacks=[early_stopping, checkpointer],
             validation_data=validation_batches,
-            validation_steps=getNumberOfSteps(VALID_DIR, BATCH_SIZE))
+            validation_steps=getNumberOfSteps(
+                VALIDATION_DIRECTORY, BATCH_SIZE))
         model.save("resnet50_final.h5")
 
 
