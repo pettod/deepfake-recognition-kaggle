@@ -7,3 +7,4 @@
 *.sav
 models/*
 *.out
+*.h5
