@@ -9,6 +9,7 @@ import numpy as np
 import os
 import pandas as pd
 import tensorflow as tf
+import time
 
 
 BATCH_SIZE = 16
@@ -99,21 +100,45 @@ def train():
 
 
 def test():
+    # Load model
+    print("Loading model")
+    t0 = time.time()
     model = load_model(MODEL_PATH)
+    print("Model loading time: {}s".format(round(time.time() - t0, 2)))
+
+    # Load CSV file
     submission_file = pd.read_csv(SUBMISSION_CSV)
     submission_file.label = submission_file.label.astype(float)
+
+    # Loop test videos
+    print("Crop faces from videos")
     for i, file_name in enumerate(sorted(os.listdir(TEST_DATA_DIRECTORY))):
+
+        # Crop faces from test video
+        t0 = time.time()
         faces_in_video = getFaces(
             TEST_DATA_DIRECTORY + '/' + file_name, IMAGE_SIZE)
+        faces_loading_time = round(time.time() - t0, 2)
+        print("Video: {}. Loading time: {}s. Number of faces: {}.".format(
+            file_name, faces_loading_time, len(faces_in_video)))
+
+        # Predict score for each face
         predictions = []
+        t0 = time.time()
         for face in faces_in_video:
             face = np.expand_dims(face, axis=0)
             predictions.append(model.predict(face)[0][1])
+        print("Predictions to {} faces took {}s".format(
+            len(faces_in_video), round(time.time() - t0, 2)))
+
+        # Compute final score for video and write to CSV
         video_score = np.mean(np.array(predictions))
         submission_file.at[i, "filename"] = file_name
         submission_file.at[i, "label"] = video_score
 
+    # Write CSV to file
     submission_file.to_csv("submission.csv", index=False)
+    print("Submission file written")
 
 
 def main():
