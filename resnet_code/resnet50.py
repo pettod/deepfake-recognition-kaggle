@@ -99,7 +99,7 @@ def train():
         model.save("resnet50_final.h5")
 
 
-def test():
+def test(print_time=True):
     # Load model
     print("Loading model")
     t_start_program = time.time()
@@ -124,19 +124,22 @@ def test():
 
         # Predict score for each face
         predictions = []
-        t0 = time.time()
+        t_start_predicting = time.time()
         for face in faces_in_video:
             face = np.expand_dims(face, axis=0)
             predictions.append(model.predict(face)[0][1])
         t_video_processed = time.time()
-        prediction_time = round(t_video_processed - t_start_video, 2)
+        prediction_time = round(t_video_processed - t_start_predicting, 2)
         total_spent_time = int((t_video_processed - t_start_program) / 60)
-        print((
-            "Video: {:5}/{}, {:20}. Number of faces: {:5}. " +
-            "Cropping faces time: {:7}s. Prediction time: {:6}s. " +
-            "Total time: {:4}min").format(
-                i+1, number_of_videos, file_name, len(faces_in_video),
-                faces_loading_time, prediction_time, total_spent_time))
+        if print_time:
+            print((
+                "Video: {:5}/{}, {:20}. Number of faces: {:5}. " +
+                "Cropping faces time: {:7}s. Prediction time: {:6}s. " +
+                "Total time: {:4}min").format(
+                    i+1, number_of_videos, file_name, len(faces_in_video),
+                    faces_loading_time, prediction_time, total_spent_time))
+        else:
+            print("Video: {}/{}".format(i+1, number_of_videos))
 
         # Compute final score for video and write to CSV
         video_score = np.mean(np.array(predictions))
