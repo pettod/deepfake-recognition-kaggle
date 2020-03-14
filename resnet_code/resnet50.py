@@ -26,14 +26,6 @@ TRAIN_DIRECTORY = TRAIN_DATA_DIRECTORY + "/train"
 VALIDATION_DIRECTORY = TRAIN_DATA_DIRECTORY + "/train"
 
 
-def rotatePoint(p, c, rad_angle):
-    p[0] -= c[0]
-    p[1] -= c[1]
-    p = [int(p[0] * math.cos(rad_angle) - p[1] * math.sin(rad_angle) + c[0]),
-         int(p[0] * math.sin(rad_angle) + p[1] * math.cos(rad_angle) + c[1])]
-    return p
-
-
 def cropAndAlign(
         img, location, landmarks, left_eye_loc_x=0.3, left_eye_loc_y=0.3):
     # Find the gravity center of the eye points
@@ -126,6 +118,14 @@ def getBatchGenerator(
 def getNumberOfSteps(data_directory, batch_size):
     return math.floor(sum(
         [len(files) for r, d, files in os.walk(data_directory)]) / batch_size)
+
+
+def rotatePoint(p, c, rad_angle):
+    p[0] -= c[0]
+    p[1] -= c[1]
+    p = [int(p[0] * math.cos(rad_angle) - p[1] * math.sin(rad_angle) + c[0]),
+         int(p[0] * math.sin(rad_angle) + p[1] * math.cos(rad_angle) + c[1])]
+    return p
 
 
 def test(print_time=True):
