@@ -25,7 +25,7 @@ TRAIN_DIRECTORY = TRAIN_DATA_DIRECTORY + "/train"
 VALIDATION_DIRECTORY = TRAIN_DATA_DIRECTORY + "/train"
 
 
-def getFaces(path, image_size, use_mtcnn=True):
+def getFaces(path, image_size, use_mtcnn=True, every_ith_frame=1):
     height = image_size[0]
     width = image_size[1]
     cap = cv2.VideoCapture(path)
@@ -36,8 +36,14 @@ def getFaces(path, image_size, use_mtcnn=True):
         return []
     if use_mtcnn:
         m = MTCNN()
+        i_frame = 1
         while(cap.isOpened()):
             ret, img = cap.read()
+            if i_frame == every_ith_frame:
+                i_frame = 1
+            else:
+                i_frame += 1
+                continue
             if not ret:
                 break
             box_faces = m.detect_faces(img)
@@ -53,8 +59,14 @@ def getFaces(path, image_size, use_mtcnn=True):
                 if(np.min(np.shape(img_face)) != 0):
                     faces.append(cv2.resize(img_face, (height, width)))
     else:
+        i_frame = 1
         while(cap.isOpened()):
             ret, img = cap.read()
+            if i_frame == every_ith_frame:
+                i_frame = 1
+            else:
+                i_frame += 1
+                continue
             if not ret:
                 break
             box_faces = face_recognition.face_locations(img, model="cnn")
