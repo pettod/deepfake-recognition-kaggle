@@ -1,4 +1,5 @@
 import cv2
+import face_recognition
 import keras
 from keras.callbacks import EarlyStopping, ModelCheckpoint
 from keras.models import Model, load_model
@@ -24,32 +25,50 @@ TRAIN_DIRECTORY = TRAIN_DATA_DIRECTORY + "/train"
 VALIDATION_DIRECTORY = TRAIN_DATA_DIRECTORY + "/train"
 
 
-def getFaces(path, image_size):
+def getFaces(path, image_size, use_mtcnn=True):
     height = image_size[0]
     width = image_size[1]
-    m = MTCNN()
     cap = cv2.VideoCapture(path)
     faces = []
     if (not cap.isOpened()):
         print(path)
         print("VIDEO НЕ ОТКРЫВАЕТСЯ СУКА БЛЯТЬ")
         return []
-    while(cap.isOpened()):
-        ret, img = cap.read()
-        if not ret:
-            break
-        box_faces = m.detect_faces(img)
-        for j in range(len(box_faces)):
-            box = box_faces[j]["box"]
-            w = max(box[2], box[3])
-            if(box[2] > box[3]):
-                img_face = img[box[1]-(box[2] - box[3])//2:box[1] -
-                               (box[2] - box[3])//2+w, box[0]:box[0]+w]
-            else:
-                img_face = img[box[1]:box[1]+w, box[0] -
-                               (-box[2] + box[3])//2:box[0]-(-box[2] + box[3])//2+w]
-            if(np.min(np.shape(img_face)) != 0):
-                faces.append(cv2.resize(img_face, (height, width)))
+    if use_mtcnn:
+        m = MTCNN()
+        while(cap.isOpened()):
+            ret, img = cap.read()
+            if not ret:
+                break
+            box_faces = m.detect_faces(img)
+            for j in range(len(box_faces)):
+                box = box_faces[j]["box"]
+                w = max(box[2], box[3])
+                if(box[2] > box[3]):
+                    img_face = img[box[1]-(box[2] - box[3])//2:box[1] -
+                                (box[2] - box[3])//2+w, box[0]:box[0]+w]
+                else:
+                    img_face = img[box[1]:box[1]+w, box[0] -
+                                (-box[2] + box[3])//2:box[0]-(-box[2] + box[3])//2+w]
+                if(np.min(np.shape(img_face)) != 0):
+                    faces.append(cv2.resize(img_face, (height, width)))
+    else:
+        while(cap.isOpened()):
+            ret, img = cap.read()
+            if not ret:
+                break
+            box_faces = face_recognition.face_locations(img, model="cnn")
+            for j in range(len(box_faces)):
+                box = box_faces[j]
+                w = abs(box[1] - box[3])
+                h = abs(box[0] - box[2])
+                size = max(w,h)
+                if(w > h):
+                    img_face = img[box[0] - (w-h)//2:box[0] - (w-h)//2+w, box[3]:box[3]+w]
+                else:
+                    img_face = img[box[0]:box[0]+h, box[3] - (h-w)//2 : box[3] - (h-w)//2+h]
+                if(np.min(np.shape(img_face)) != 0):
+                    faces.append(cv2.resize(img_face, (height, width)))
     return faces
 
 
