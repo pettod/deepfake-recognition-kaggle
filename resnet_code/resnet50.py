@@ -102,25 +102,25 @@ def train():
 def test():
     # Load model
     print("Loading model")
-    t0 = time.time()
+    t_start_program = time.time()
     model = load_model(MODEL_PATH)
-    print("Model loading time: {}s".format(round(time.time() - t0, 2)))
+    model_loading_time = round(time.time() - t_start_program, 2)
+    print("Model loading time: {}s".format(model_loading_time))
 
     # Load CSV file
     submission_file = pd.read_csv(SUBMISSION_CSV)
     submission_file.label = submission_file.label.astype(float)
 
     # Loop test videos
-    print("Crop faces from videos")
+    print("Cropping faces from videos")
+    number_of_videos = len(os.listdir(TEST_DATA_DIRECTORY))
     for i, file_name in enumerate(sorted(os.listdir(TEST_DATA_DIRECTORY))):
 
         # Crop faces from test video
-        t0 = time.time()
+        t_start_video = time.time()
         faces_in_video = getFaces(
             TEST_DATA_DIRECTORY + '/' + file_name, IMAGE_SIZE)
-        faces_loading_time = round(time.time() - t0, 2)
-        print("Video: {}. Loading time: {}s. Number of faces: {}.".format(
-            file_name, faces_loading_time, len(faces_in_video)))
+        faces_loading_time = round(time.time() - t_start_video, 2)
 
         # Predict score for each face
         predictions = []
@@ -128,8 +128,15 @@ def test():
         for face in faces_in_video:
             face = np.expand_dims(face, axis=0)
             predictions.append(model.predict(face)[0][1])
-        print("Predictions to {} faces took {}s".format(
-            len(faces_in_video), round(time.time() - t0, 2)))
+        t_video_processed = time.time()
+        prediction_time = round(t_video_processed - t_start_video, 2)
+        total_spent_time = int((t_video_processed - t_start_program) / 60)
+        print((
+            "Video: {:5}/{}, {:20}. Number of faces: {:5}. " +
+            "Cropping faces time: {:7}s. Prediction time: {:6}s. " +
+            "Total time: {:4}min").format(
+                i+1, number_of_videos, file_name, len(faces_in_video),
+                faces_loading_time, prediction_time, total_spent_time))
 
         # Compute final score for video and write to CSV
         video_score = np.mean(np.array(predictions))
