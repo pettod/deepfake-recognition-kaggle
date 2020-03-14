@@ -1,6 +1,7 @@
 import cv2
 import face_recognition
 import imutils
+import json
 import keras
 from keras.callbacks import EarlyStopping, ModelCheckpoint
 from keras.models import Model, load_model
@@ -13,17 +14,63 @@ import tensorflow as tf
 import time
 
 
+# Hyperparameters
 BATCH_SIZE = 16
 EPOCHS = 1000
 EVERY_ITH_FRAME = 10
 IMAGE_SIZE = (224, 224)
 LEARNING_RATE = 0.0001
+
+# Training and testing paths
 MODEL_PATH = "../input/resnet-model/resnet50_best.h5"
+RAW_TRAIN_DATA_DIRECTORY = "../input/deepfake-detection-challenge/train_sample_videos"
+LABELS_PATH = "../input/deepfake-detection-challenge/metadata.json"
 SUBMISSION_CSV = "../input/deepfake-detection-challenge/sample_submission.csv"
 TEST_DATA_DIRECTORY = "../input/deepfake-detection-challenge/test_videos"
 TRAIN_DATA_DIRECTORY = "../input/cropped-faces"
 TRAIN_DIRECTORY = TRAIN_DATA_DIRECTORY + "/train"
 VALIDATION_DIRECTORY = TRAIN_DATA_DIRECTORY + "/train"
+
+# Creating training data
+TARGET_PATH_FAKE = TRAIN_DIRECTORY + "/fake"
+TARGET_PATH_REAL = TRAIN_DIRECTORY + "/real"
+
+
+def createTrainData(print_time=True):
+    t_start_program = time.time()
+    labels = loadLabels()
+
+    # Iterate training videos
+    number_of_videos = len(os.listdir(RAW_TRAIN_DATA_DIRECTORY))
+    for i, file_name in enumerate(sorted(os.listdir(
+            RAW_TRAIN_DATA_DIRECTORY))):
+
+        # Crop faces from train video
+        t_start_video = time.time()
+        faces_in_video = getFaces(
+            RAW_TRAIN_DATA_DIRECTORY + '/' + file_name, IMAGE_SIZE,
+            EVERY_ITH_FRAME)
+        t_faces_loaded = time.time()
+        faces_loading_time = round(t_faces_loaded - t_start_video, 2)
+        total_spent_time = int((t_faces_loaded - t_start_program) / 60)
+
+        # Save faces
+        path = TARGET_PATH_FAKE
+        if labels[i]:
+            path = TARGET_PATH_REAL
+        for j, face in enumerate(faces_in_video):
+            sample_file_name = "{}_{}.png".format(str(i+1), str(j+1))
+            cv2.imwrite(path + '/' + sample_file_name, face)
+
+        # Print processing times
+        if print_time:
+            print((
+                "Video: {:5}/{}, {:20}. Number of faces: {:5}. " +
+                "Cropping faces time: {:7}s. Total time: {:4}min").format(
+                    i+1, number_of_videos, file_name, len(faces_in_video),
+                    faces_loading_time, total_spent_time))
+        else:
+            print("Video: {}/{}".format(i+1, number_of_videos))
 
 
 def cropAndAlign(
@@ -120,6 +167,19 @@ def getNumberOfSteps(data_directory, batch_size):
         [len(files) for r, d, files in os.walk(data_directory)]) / batch_size)
 
 
+def loadLabels():
+    # Load labels from metadata
+    labels = []
+    with open(LABELS_PATH) as labels_json:
+        labels_dict = json.load(labels_json)
+        for key, value in labels_dict.items():
+            if value["label"] == "FAKE":
+                labels.append(0)
+            else:
+                labels.append(1)
+    return labels
+
+
 def rotatePoint(p, c, rad_angle):
     p[0] -= c[0]
     p[1] -= c[1]
@@ -160,6 +220,8 @@ def test(print_time=True):
         t_video_processed = time.time()
         prediction_time = round(t_video_processed - t_start_predicting, 2)
         total_spent_time = int((t_video_processed - t_start_program) / 60)
+
+        # Print processing times
         if print_time:
             print((
                 "Video: {:5}/{}, {:20}. Number of faces: {:5}. " +
@@ -211,8 +273,9 @@ def train():
 
 
 def main():
+    createTrainData()
     #train()
-    test()
+    #test()
 
 
 main()
