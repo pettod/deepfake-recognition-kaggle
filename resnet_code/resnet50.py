@@ -132,6 +132,7 @@ def getFaces(path, image_size, every_ith_frame=1):
         print("VIDEO НЕ ОТКРЫВАЕТСЯ СУКА БЛЯТЬ")
         return []
     i_frame = 1
+    box = [-1, -1, -1, -1]
     while(cap.isOpened()):
         ret, img = cap.read()
         if i_frame == every_ith_frame:
@@ -141,13 +142,50 @@ def getFaces(path, image_size, every_ith_frame=1):
             continue
         if not ret:
             break
-        box_faces = face_recognition.face_locations(img, model="hog")
-        landmarks = face_recognition.face_landmarks(img, box_faces)
-        for j in range(len(box_faces)):
-            box = box_faces[j]
-            img_face = cropAndAlign(img, box, landmarks[j])
-            if(np.min(np.shape(img_face)) != 0):
-                faces.append(cv2.resize(img_face, (height, width)))
+        if(box[0] == -1):
+            crop_img = img
+        else:
+            w = abs(box[0]-box[2])
+            box[0] -= w // 5
+            box[1] += w // 5
+            box[2] += w // 5
+            box[3] -= w // 5
+
+            box[0] = max(0, box[0])
+            box[1] = min(np.shape(img)[1], box[1])
+            box[2] = min(np.shape(img)[0], box[2])
+            box[3] = max(0, box[3])
+
+            crop_img = img[box[0]:box[2], box[3]:box[1]]
+        model = "hog"
+        if crop_img.shape[0] < img.shape[0]:
+            model = "hog"
+        box_faces = face_recognition.face_locations(crop_img, model=model)
+        if(len(box_faces) == 0):
+            continue
+        landmarks = face_recognition.face_landmarks(crop_img)
+        if len(landmarks) == 0:
+            continue
+        landmarks = landmarks[0]
+        if(box[0] != -1):
+            box_faces[0] = list(box_faces[0])
+            box_faces[0][0] += box[0]
+            box_faces[0][2] += box[0]
+            box_faces[0][1] += box[3]
+            box_faces[0][3] += box[3]
+            for i in range(len(landmarks["left_eye"])):
+                landmarks["left_eye"][i] = list(landmarks["left_eye"][i])
+                landmarks["left_eye"][i][0] += box[3]
+                landmarks["left_eye"][i][1] += box[0]
+            for i in range(len(landmarks["right_eye"])):
+                landmarks["right_eye"][i] = list(landmarks["right_eye"][i])
+                landmarks["right_eye"][i][0] += box[3]
+                landmarks["right_eye"][i][1] += box[0]
+
+        box = list(box_faces[0])
+        img_face = cropAndAlign(img, box, landmarks)
+        if(np.min(np.shape(img_face)) != 0):
+            faces.append(cv2.resize(img_face, (height, width)))
     return faces
 
 
