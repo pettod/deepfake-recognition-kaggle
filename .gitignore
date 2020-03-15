@@ -8,3 +8,8 @@
 models/*
 *.out
 *.h5
+*.dat
+*.prototxt
+*.pbtxt
+*.caffemodel
+
