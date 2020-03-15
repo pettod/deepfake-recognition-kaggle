@@ -282,7 +282,9 @@ def test(print_time=True):
             print("Video: {}/{}".format(i+1, number_of_videos))
 
         # Compute final score for video and write to CSV
-        video_score = np.mean(np.array(predictions))
+        video_score = 0.5
+        if len(predictions) > 0:
+            video_score = np.mean(np.array(predictions))
         submission_file.at[i, "filename"] = file_name
         submission_file.at[i, "label"] = video_score
 
