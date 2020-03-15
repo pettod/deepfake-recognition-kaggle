@@ -265,7 +265,7 @@ def test(print_time=True):
         t_start_predicting = time.time()
         for face in faces_in_video:
             face = np.expand_dims(face, axis=0)
-            predictions.append(model.predict(face)[0][1])
+            predictions.append(model.predict(face)[0])
         t_video_processed = time.time()
         prediction_time = round(t_video_processed - t_start_predicting, 2)
         total_spent_time = int((t_video_processed - t_start_program) / 60)
@@ -284,7 +284,10 @@ def test(print_time=True):
         # Compute final score for video and write to CSV
         video_score = 0.5
         if len(predictions) > 0:
-            video_score = np.mean(np.array(predictions))
+            predictions = np.array(predictions)
+            fake_scores = predictions[:, 0]
+            real_scores = predictions[:, 1]
+            video_score = np.mean((real_scores - fake_scores + 1) / 2)
         submission_file.at[i, "filename"] = file_name
         submission_file.at[i, "label"] = video_score
 
