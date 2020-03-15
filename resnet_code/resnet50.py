@@ -10,6 +10,7 @@ import math
 import numpy as np
 import os
 import pandas as pd
+import random
 import tensorflow as tf
 import time
 
@@ -32,6 +33,7 @@ TRAIN_DIRECTORY = TRAIN_DATA_DIRECTORY + "/train"
 VALIDATION_DIRECTORY = TRAIN_DATA_DIRECTORY + "/train"
 
 # Creating training data
+MAX_NUMBER_OF_FACES_PER_VIDEO = 3
 TARGET_PATH_FAKE = TRAIN_DIRECTORY + "/fake"
 TARGET_PATH_REAL = TRAIN_DIRECTORY + "/real"
 
@@ -50,6 +52,15 @@ def createTrainData(print_time=True):
         faces_in_video = getFaces(
             RAW_TRAIN_DATA_DIRECTORY + '/' + file_name, IMAGE_SIZE,
             EVERY_ITH_FRAME)
+
+        # Pick random faces
+        number_of_picked_faces = min(
+            len(faces_in_video), MAX_NUMBER_OF_FACES_PER_VIDEO)
+        random_face_indices = sorted(random.sample(
+            range(len(faces_in_video)), number_of_picked_faces))
+        picked_faces = [
+            face for j, face in enumerate(faces_in_video)
+            if j in random_face_indices]
         t_faces_loaded = time.time()
         faces_loading_time = round(t_faces_loaded - t_start_video, 2)
         total_spent_time = int((t_faces_loaded - t_start_program) / 60)
@@ -58,7 +69,7 @@ def createTrainData(print_time=True):
         path = TARGET_PATH_FAKE
         if labels[i]:
             path = TARGET_PATH_REAL
-        for j, face in enumerate(faces_in_video):
+        for j, face in enumerate(picked_faces):
             sample_file_name = "{}_{}.png".format(str(i+1), str(j+1))
             cv2.imwrite(path + '/' + sample_file_name, face)
 
