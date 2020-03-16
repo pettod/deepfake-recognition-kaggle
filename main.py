@@ -1,126 +1,222 @@
-import csv
 import cv2
 import json
+import keras
+from keras.callbacks import EarlyStopping, ModelCheckpoint
+from keras.models import Model, load_model
+from keras.optimizers import Adam
+import math
 import numpy as np
 import os
-import pickle
-import matplotlib.pyplot as plt
-from skimage.feature import hog
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score
-from joblib import Parallel, delayed
-import multiprocessing
-num_cores = multiprocessing.cpu_count()
+import pandas as pd
+import random
+import tensorflow as tf
+import time
 
 
-LABEL_FILE_NAME = "metadata.json"
-SUBMISSION_FILE_NAME = "submission.csv"
-TEST_DATA_PATH = "../cropped_faces/deepfake/faces_test_videos/"  #"../input/deepfake-detection-challenge/test_videos/"
-TRAIN_DATA_PATH = "../cropped_faces/deepfake/faces_train_videos/"
-TRAIN_SIZE = 400
-TEST_SIZE = 400
-FRAME_CNT = 400
+# Hyperparameters
+BATCH_SIZE = 16
+EPOCHS = 1000
+EVERY_ITH_FRAME = 10
+IMAGE_SIZE = (224, 224)
+LEARNING_RATE = 0.0001
+
+# Training and testing paths
+CREATE_MODEL_PATH = "resnet50_best.h5"
+LOAD_MODEL_PATH = "../input/resnet-model/resnet50_best.h5"
+RAW_TRAIN_DATA_DIRECTORY = "../input/deepfake-detection-challenge/train_sample_videos"
+LABELS_PATH = "../input/deepfake-detection-challenge/metadata.json"
+SUBMISSION_CSV = "../input/deepfake-detection-challenge/sample_submission.csv"
+TEST_DATA_DIRECTORY = "../input/deepfake-detection-challenge/test_videos"
+TRAIN_DATA_DIRECTORY = "../input/cropped-faces"
+TRAIN_DIRECTORY = TRAIN_DATA_DIRECTORY + "/train"
+VALIDATION_DIRECTORY = TRAIN_DATA_DIRECTORY + "/train"
+
+# Creating training data
+MAX_NUMBER_OF_FACES_PER_VIDEO = 3
+TARGET_PATH_FAKE = TRAIN_DIRECTORY + "/fake"
+TARGET_PATH_REAL = TRAIN_DIRECTORY + "/real"
+
+# Face detection model paths
+FACE_DETECTION_MODEL_FILE = "../input/face-detection-config-files/res10_300x300_ssd_iter_140000_fp16.caffemodel"
+FACE_DETECTION_CONFIG_FILE = "../input/face-detection-config-files/deploy.prototxt"
 
 
-def writeSubmissionFile(video_file_names, class_probabilities):
-    with open(SUBMISSION_FILE_NAME, "w+") as submission_file:
-        class_probabilities = [str(element) for element in class_probabilities]
-        writer = csv.writer(submission_file, delimiter=',')
-        writer.writerow(["filename", "label"])
-        real_cnt = 0
-        for i in range(len(video_file_names[0:TRAIN_SIZE])):
-            if(class_probabilities[i] == "1"):
-                real_cnt+=1
-            writer.writerow([video_file_names[i][6:], class_probabilities[i]])
-        print("REALES: %d" % real_cnt)
+def createTrainData(print_time=True):
+    t_start_program = time.time()
+    labels = loadLabels()
+    net = cv2.dnn.readNetFromCaffe(
+        FACE_DETECTION_CONFIG_FILE, FACE_DETECTION_MODEL_FILE)
 
-def readVideoNames(data_path):
-    
-    video_file_names = []
-    for directory_name, _, file_names in os.walk(data_path):
-        for video_name in sorted(file_names):
-            video_file_names.append(video_name)
-    return video_file_names
+    # Iterate training videos
+    number_of_videos = len(os.listdir(RAW_TRAIN_DATA_DIRECTORY))
+    for i, file_name in enumerate(sorted(os.listdir(
+            RAW_TRAIN_DATA_DIRECTORY))):
 
+        # Crop faces from train video
+        t_start_video = time.time()
+        faces_in_video = getFaces(
+            RAW_TRAIN_DATA_DIRECTORY + '/' + file_name, IMAGE_SIZE, net,
+            EVERY_ITH_FRAME)
 
-def readFramesFromVideo(video):
-    frames = []
-    while(video.isOpened()):
-        is_readable, frame = video.read()
-        if is_readable:
-            frames.append(frame)
+        # Pick random faces
+        number_of_picked_faces = min(
+            len(faces_in_video), MAX_NUMBER_OF_FACES_PER_VIDEO)
+        random_face_indices = sorted(random.sample(
+            range(len(faces_in_video)), number_of_picked_faces))
+        picked_faces = [
+            face for j, face in enumerate(faces_in_video)
+            if j in random_face_indices]
+        t_faces_loaded = time.time()
+        faces_loading_time = round(t_faces_loaded - t_start_video, 2)
+        total_spent_time = int((t_faces_loaded - t_start_program) / 60)
+
+        # Save faces
+        path = TARGET_PATH_FAKE
+        if labels[i]:
+            path = TARGET_PATH_REAL
+        for j, face in enumerate(picked_faces):
+            sample_file_name = "{}_{}.png".format(str(i+1), str(j+1))
+            cv2.imwrite(path + '/' + sample_file_name, face)
+
+        # Print processing times
+        if print_time:
+            print((
+                "Video: {:5}/{}, {:20}. Number of faces: {:5}. " +
+                "Cropping faces time: {:7}s. Total time: {:4}min").format(
+                    i+1, number_of_videos, file_name, len(faces_in_video),
+                    faces_loading_time, total_spent_time))
         else:
+            print("Video: {}/{}".format(i+1, number_of_videos))
+
+
+def cropAndAlign(
+        img, location, landmarks, left_eye_loc_x=0.3, left_eye_loc_y=0.3):
+    # Find the gravity center of the eye points
+    left_eye = [
+        sum([point[0] for point in landmarks["left_eye"]]) //
+        len(landmarks["left_eye"]),
+        sum([point[1] for point in landmarks["left_eye"]]) //
+        len(landmarks["left_eye"])]
+    right_eye = [
+        sum([point[0] for point in landmarks["right_eye"]]) //
+        len(landmarks["left_eye"]),
+        sum([point[1] for point in landmarks["right_eye"]]) //
+        len(landmarks["left_eye"])]
+    y = right_eye[1] - left_eye[1]
+    x = right_eye[0] - left_eye[0]
+    angle = math.atan2(y, x)
+    deg_angle = 180*math.atan2(y, x)/math.pi
+
+    img = imutils.rotate(img, deg_angle, tuple(left_eye))
+    location = list(location)
+    location[3], location[0] = rotatePoint(
+        [location[3], location[0]], left_eye, angle)
+    location[1], location[2] = rotatePoint(
+        [location[1], location[2]], left_eye, angle)
+
+    w = abs(location[1] - location[3])
+    h = abs(location[0] - location[2])
+    size = max(w, h)
+
+    left_eye[0] -= location[3]
+    left_eye[1] -= location[0]
+
+    if(w > h):
+        img = imutils.translate(
+            img, size * left_eye_loc_x - left_eye[0],
+            size * left_eye_loc_y - left_eye[1] - (w-h)//2)
+        img = img[
+            location[0] - (w-h)//2:location[0] -
+            (w-h)//2+w, location[3]:location[3]+w]
+    else:
+        img = imutils.translate(
+            img, size * left_eye_loc_x - left_eye[0] - (h-w)//2,
+            size * left_eye_loc_y - left_eye[1])
+        img = img[
+            location[0]:location[0]+h, location[3] -
+            (h-w)//2: location[3] - (h-w)//2+h]
+    return img
+
+
+def getFaces(
+        path, image_size, net, every_ith_frame=1, confidence_threshold=0.5):
+    cap = cv2.VideoCapture(path)
+    faces = []
+    if (not cap.isOpened()):
+        print("Cannot open video:", path)
+        return faces
+    i_frame = 1
+    while(cap.isOpened()):
+
+        # Read video frame
+        ret, frame = cap.read()
+        if not ret:
             break
-    return np.array(frames)
+
+        # Skip frames and read only every i'th frame
+        if i_frame != every_ith_frame:
+            i_frame += 1
+            continue
+        else:
+            i_frame = 1
+        frame_height = frame.shape[0]
+        frame_width = frame.shape[1]
+
+        # Detect faces from frame
+        blob = cv2.dnn.blobFromImage(
+            frame, 1.0, (300, 300), [104, 117, 123], False, False)
+        net.setInput(blob)
+        detections = net.forward()
+
+        # Iterate all detections
+        for i in range(detections.shape[2]):
+            confidence = detections[0, 0, i, 2]
+
+            # Detected face
+            if confidence > confidence_threshold:
+                x1 = int(detections[0, 0, i, 3] * frame_width)
+                y1 = int(detections[0, 0, i, 4] * frame_height)
+                x2 = int(detections[0, 0, i, 5] * frame_width)
+                y2 = int(detections[0, 0, i, 6] * frame_height)
+                face_width = x2 - x1
+                face_height = y2 - y1
+
+                # Make detected area square
+                if face_height < face_width:
+                    coordinate_change = (face_width - face_height) // 2
+                    x1 += coordinate_change
+                    x2 -= coordinate_change
+                else:
+                    coordinate_change = (face_height - face_width) // 2
+                    y1 += coordinate_change
+                    y2 -= coordinate_change
+                face = cv2.resize(frame[y1:y2, x1:x2], image_size)
+                faces.append(face)
+    return faces
 
 
-def cropFaces(test_video_file_names):
-    for i in range(len(test_video_file_names)):
-        video = cv2.VideoCapture(TEST_DATA_PATH + test_video_file_names[i])
-        frames = readFramesFromVideo(video)
-        number_of_frames = frames.shape[0]
-        for j in range(number_of_frames):
-            print("Frame {}/{}".format(j+1, number_of_frames), end="\r")
-            frame = frames[j]
-            faces_locations = face_recognition.face_locations(frame)
-            for y1, x1, y2, x2 in faces_locations:
-                face = frame[y1:y2, x2:x1, :]
-                cv2.imwrite(str(j)+".png", face)
-
-def loadFaces(path):
-    for dir in sorted(os.listdir(path)): #range(1, TRAIN_SIZE+1):
-        files_png = os.listdir(path + dir + '/' + 'PNG/')
-        video_frames = []
-
-        for j in range(len(files_png[0:min(len(files_png), FRAME_CNT)])):
-            file = files_png[j]
-            video_frames.append(cv2.imread(path + dir + "/PNG/" + file))
-
-        yield video_frames
-        #videos.append(video_frames)
-    #return videos
-    #for directory_name, _, file_names in sorted(os.walk(path)):
-    #    if file_names != []:
-    #        video_frames = []
-    #        for frame_name in sorted(file_names):
-    #            video_frames.append(
-    #                cv2.imread(directory_name + '/' + frame_name))
-    #        videos.append(video_frames)
-    #        yield video_frames
+def getBatchGenerator(
+    data_directory, image_size, batch_size, horizontal_flip=False,
+        vertical_flip=False):
+    gen = keras.preprocessing.image.ImageDataGenerator(
+        horizontal_flip=horizontal_flip, vertical_flip=vertical_flip)
+    batches = gen.flow_from_directory(
+        data_directory, target_size=image_size, class_mode="categorical",
+        shuffle=True, batch_size=batch_size)
+    return batches
 
 
-def hogFeatureVector(
-        videos, orientations=8, pixels_per_cell=(16, 16),
-        cells_per_block=(1, 1), plot_hog=False):
-    def parallel_hist(video):
-        print("HOG, video")
-        face_histograms = []
-        for face in video:
-            if(face is None):
-                continue
-            feature_vector, hog_image = hog(
-                face, orientations=orientations,
-                pixels_per_cell=pixels_per_cell,
-                cells_per_block=cells_per_block, visualize=True,
-                multichannel=True)
-            histogram, _, _ = plt.hist(feature_vector, orientations)
-            face_histograms.append(histogram)
-        if face_histograms != []:
-            histogram_array = np.array(face_histograms)
-            mean_histogram = np.mean(histogram_array, axis=0)
-            std_histogram = np.std(histogram_array, axis=0)
-            return [mean_histogram, std_histogram]
-        return [range(8), range(8)]
-    video_histograms = Parallel(n_jobs=num_cores)(delayed(parallel_hist)(video) for video in videos)
-    return video_histograms
+def getNumberOfSteps(data_directory, batch_size):
+    return math.floor(sum(
+        [len(files) for r, d, files in os.walk(data_directory)]) / batch_size)
 
-def loadLabels(path):
+
+def loadLabels():
+    # Load labels from metadata
     labels = []
-    with open(LABEL_FILE_NAME) as labels_json:
+    with open(LABELS_PATH) as labels_json:
         labels_dict = json.load(labels_json)
         for key, value in labels_dict.items():
-            #if(labels_json[i]["label"] == "FAKE"):
             if value["label"] == "FAKE":
                 labels.append(0)
             else:
@@ -128,99 +224,110 @@ def loadLabels(path):
     return labels
 
 
-#def visualizeHistograms(video_histograms):
-#    for i in range(len(video_histograms)):
-#        mean_histogram = video_histograms[i][0]
-#        std_histogram = video_histograms[i][1]
-#        plt.figure(i)
-#        plt.subplot(121)
-#        plt.hist(mean_histogram)
-#        plt.title("Mean")
-#        plt.subplot(122)
-#        plt.hist(std_histogram)
-#        plt.title("STD")
-#    plt.show()
+def rotatePoint(p, c, rad_angle):
+    p[0] -= c[0]
+    p[1] -= c[1]
+    p = [int(p[0] * math.cos(rad_angle) - p[1] * math.sin(rad_angle) + c[0]),
+         int(p[0] * math.sin(rad_angle) + p[1] * math.cos(rad_angle) + c[1])]
+    return p
 
 
-def checkLabelsToRemove(labels, path):
-    existing_labels = []
-    for i in range(1, len(labels)+1):
-        pngs = os.listdir(TRAIN_DATA_PATH + 'video_%03d.mp4/PNG' % i )
-        if(len(pngs) == 0):
-            print("CYKA BLAT: %03d" % i)
-            continue
-        existing_labels.append(labels[i-1])
-        
+def test(print_time=True):
+    # Load model
+    print("Loading model")
+    t_start_program = time.time()
+    net = cv2.dnn.readNetFromCaffe(
+        FACE_DETECTION_CONFIG_FILE, FACE_DETECTION_MODEL_FILE)
+    model = load_model(LOAD_MODEL_PATH)
+    model_loading_time = round(time.time() - t_start_program, 2)
+    print("Model loading time: {}s".format(model_loading_time))
 
-    # for directory_name, _, file_names in sorted(os.walk(path)):
-    #     if directory_name != path:
-    #         if len(os.listdir(directory_name)) > 0:
-    #         else:
-    #             print(i)
-    #         i += 1
-    print("%03d LABELS EXIST " % len(existing_labels))
-    return existing_labels
+    # Load CSV file
+    submission_file = pd.read_csv(SUBMISSION_CSV)
+    submission_file.label = submission_file.label.astype(float)
 
+    # Loop test videos
+    print("Cropping faces from videos")
+    number_of_videos = len(os.listdir(TEST_DATA_DIRECTORY))
+    for i, file_name in enumerate(sorted(os.listdir(TEST_DATA_DIRECTORY))):
 
-def train(feature_path='models/feature_train.dat', save_feature_path='models/feature_train.dat'):
-    labels = loadLabels(TRAIN_DATA_PATH)[0:TRAIN_SIZE]
-    #labels = checkLabelsToRemove(labels, TRAIN_DATA_PATH)
-    videos = loadFaces(TRAIN_DATA_PATH)
-    if(feature_path is None):
-        video_histograms = hogFeatureVector(videos, plot_hog=False)
-        print(video_histograms)
-        feature_vectors = np.array(video_histograms).reshape(
-            len(video_histograms), 16)
-        pickle.dump(feature_vectors, open(save_feature_path, "wb"))
-    else:
-        feature_vectors = pickle.load(open(feature_path, "rb"))
-    X_train, X_test, y_train, y_test = train_test_split(
-        feature_vectors, labels, test_size=0.2, random_state=42)
+        # Crop faces from test video
+        t_start_video = time.time()
+        faces_in_video = getFaces(
+            TEST_DATA_DIRECTORY + '/' + file_name, IMAGE_SIZE, net,
+            EVERY_ITH_FRAME)
+        faces_loading_time = round(time.time() - t_start_video, 2)
 
-    print("Training started")
-    model = RandomForestClassifier(max_depth=8, random_state=13)
-    model.fit(X_train, y_train)
-    y_preds = model.predict(X_test)
-    print(labels)
-    precision = accuracy_score(y_test, y_preds)
-    evaluation_score = logLoss(y_test, y_preds)
-    print("Precision:", precision)
-    print("Evaluation score:", evaluation_score)
-    pickle.dump(model, open("models/model.sav", 'wb')) 
+        # Predict score for each face
+        predictions = []
+        t_start_predicting = time.time()
+        for face in faces_in_video:
+            face = np.expand_dims(face, axis=0)
+            predictions.append(model.predict(face)[0])
+        t_video_processed = time.time()
+        prediction_time = round(t_video_processed - t_start_predicting, 2)
+        total_spent_time = int((t_video_processed - t_start_program) / 60)
 
+        # Print processing times
+        if print_time:
+            print((
+                "Video: {:5}/{}, {:20}. Number of faces: {:5}. " +
+                "Cropping faces time: {:7}s. Prediction time: {:6}s. " +
+                "Total time: {:4}min").format(
+                    i+1, number_of_videos, file_name, len(faces_in_video),
+                    faces_loading_time, prediction_time, total_spent_time))
+        else:
+            print("Video: {}/{}".format(i+1, number_of_videos))
 
-def logLoss(y_pred, y_true):
-    if len(y_pred) != len(y_true):
-        Exception("No same length")
-    sum_term = 0
-    eps = 1e-15
-    n = len(y_pred)
-    for i in range(n):
-        y_p = y_pred[i]
-        y_t = y_true[i]
-        sum_term += y_t * np.log(y_p + eps) + (1 - y_t) * np.log(1 - y_p + eps)
-    return -1 * sum_term / n
+        # Compute final score for video and write to CSV
+        video_score = 0.5
+        if len(predictions) > 0:
+            predictions = np.array(predictions)
+            fake_scores = predictions[:, 0]
+            real_scores = predictions[:, 1]
+            video_score = np.mean((real_scores - fake_scores + 1) / 2)
+        submission_file.at[i, "filename"] = file_name
+        submission_file.at[i, "label"] = video_score
 
-
-def test(feature_path='models/feature_test.dat', save_feature_path='models/feature_test.dat'):
-    model = pickle.load(open("models/model.sav", 'rb'))
-    test_video_file_names = sorted(os.listdir(TEST_DATA_PATH)) #readVideoNames(TEST_DATA_PATH)
-    videos = loadFaces(TEST_DATA_PATH)
-    if(feature_path is None):
-        video_histograms = hogFeatureVector(videos, plot_hog=False)
-        feature_vectors = np.array(video_histograms).reshape(
-            len(video_histograms), 16)
-        pickle.dump(feature_vectors, open(save_feature_path, "wb"))
-    else:
-        feature_vectors = pickle.load(open(feature_path, "rb"))
-    classes = model.predict(feature_vectors[0:TEST_SIZE])
-    class_probabilities = np.random.rand(len(test_video_file_names))
-    writeSubmissionFile(test_video_file_names, classes)
+    # Write CSV to file
+    submission_file.to_csv("submission.csv", index=False)
+    print("Submission file written")
 
 
-def main():    
-    train(None)
-    test(None)
+def train():
+    with tf.device("/device:GPU:0"):
+
+        # Load batch generators
+        train_batches = getBatchGenerator(
+            TRAIN_DIRECTORY, IMAGE_SIZE, BATCH_SIZE)
+        validation_batches = getBatchGenerator(
+            VALIDATION_DIRECTORY, IMAGE_SIZE, BATCH_SIZE, True, True)
+
+        # Create model
+        model = keras.applications.resnet50.ResNet50(weights=None, classes=2)
+        model.compile(
+            optimizer=Adam(lr=LEARNING_RATE), loss="binary_crossentropy",
+            metrics=["accuracy"])
+
+        # Fit data
+        early_stopping = EarlyStopping(patience=10)
+        checkpointer = ModelCheckpoint(
+            CREATE_MODEL_PATH, verbose=1, save_best_only=True)
+        model.fit_generator(
+            train_batches,
+            steps_per_epoch=getNumberOfSteps(TRAIN_DIRECTORY, BATCH_SIZE),
+            epochs=EPOCHS,
+            callbacks=[early_stopping, checkpointer],
+            validation_data=validation_batches,
+            validation_steps=getNumberOfSteps(
+                VALIDATION_DIRECTORY, BATCH_SIZE))
+        model.save("resnet50_final.h5")
+
+
+def main():
+    #createTrainData()
+    #train()
+    test()
 
 
 main()
