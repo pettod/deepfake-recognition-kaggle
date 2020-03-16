@@ -1,6 +1,4 @@
 import cv2
-import face_recognition
-import imutils
 import json
 import keras
 from keras.callbacks import EarlyStopping, ModelCheckpoint
@@ -37,10 +35,16 @@ MAX_NUMBER_OF_FACES_PER_VIDEO = 3
 TARGET_PATH_FAKE = TRAIN_DIRECTORY + "/fake"
 TARGET_PATH_REAL = TRAIN_DIRECTORY + "/real"
 
+# Face detection model paths
+FACE_DETECTION_MODEL_FILE = "../input/face-detection-config-files/res10_300x300_ssd_iter_140000_fp16.caffemodel"
+FACE_DETECTION_CONFIG_FILE = "../input/face-detection-config-files/deploy.prototxt"
+
 
 def createTrainData(print_time=True):
     t_start_program = time.time()
     labels = loadLabels()
+    net = cv2.dnn.readNetFromCaffe(
+        FACE_DETECTION_CONFIG_FILE, FACE_DETECTION_MODEL_FILE)
 
     # Iterate training videos
     number_of_videos = len(os.listdir(RAW_TRAIN_DATA_DIRECTORY))
@@ -50,7 +54,7 @@ def createTrainData(print_time=True):
         # Crop faces from train video
         t_start_video = time.time()
         faces_in_video = getFaces(
-            RAW_TRAIN_DATA_DIRECTORY + '/' + file_name, IMAGE_SIZE,
+            RAW_TRAIN_DATA_DIRECTORY + '/' + file_name, IMAGE_SIZE, net,
             EVERY_ITH_FRAME)
 
         # Pick random faces
@@ -133,70 +137,60 @@ def cropAndAlign(
     return img
 
 
-def getFaces(path, image_size, every_ith_frame=1):
-    height = image_size[0]
-    width = image_size[1]
+def getFaces(
+        path, image_size, net, every_ith_frame=1, confidence_threshold=0.5):
     cap = cv2.VideoCapture(path)
     faces = []
     if (not cap.isOpened()):
-        print(path)
-        print("VIDEO НЕ ОТКРЫВАЕТСЯ СУКА БЛЯТЬ")
-        return []
+        print("Cannot open video:", path)
+        return faces
     i_frame = 1
-    box = [-1, -1, -1, -1]
     while(cap.isOpened()):
-        ret, img = cap.read()
-        if i_frame == every_ith_frame:
-            i_frame = 1
-        else:
-            i_frame += 1
-            continue
+
+        # Read video frame
+        ret, frame = cap.read()
         if not ret:
             break
-        if(box[0] == -1):
-            crop_img = img
+
+        # Skip frames and read only every i'th frame
+        if i_frame != every_ith_frame:
+            i_frame += 1
+            continue
         else:
-            w = abs(box[0]-box[2])
-            box[0] -= w // 5
-            box[1] += w // 5
-            box[2] += w // 5
-            box[3] -= w // 5
+            i_frame = 1
+        frame_height = frame.shape[0]
+        frame_width = frame.shape[1]
 
-            box[0] = max(0, box[0])
-            box[1] = min(np.shape(img)[1], box[1])
-            box[2] = min(np.shape(img)[0], box[2])
-            box[3] = max(0, box[3])
+        # Detect faces from frame
+        blob = cv2.dnn.blobFromImage(
+            frame, 1.0, (300, 300), [104, 117, 123], False, False)
+        net.setInput(blob)
+        detections = net.forward()
 
-            crop_img = img[box[0]:box[2], box[3]:box[1]]
-        model = "hog"
-        if crop_img.shape[0] < img.shape[0]:
-            model = "hog"
-        box_faces = face_recognition.face_locations(crop_img, model=model)
-        if(len(box_faces) == 0):
-            continue
-        landmarks = face_recognition.face_landmarks(crop_img)
-        if len(landmarks) == 0:
-            continue
-        landmarks = landmarks[0]
-        if(box[0] != -1):
-            box_faces[0] = list(box_faces[0])
-            box_faces[0][0] += box[0]
-            box_faces[0][2] += box[0]
-            box_faces[0][1] += box[3]
-            box_faces[0][3] += box[3]
-            for i in range(len(landmarks["left_eye"])):
-                landmarks["left_eye"][i] = list(landmarks["left_eye"][i])
-                landmarks["left_eye"][i][0] += box[3]
-                landmarks["left_eye"][i][1] += box[0]
-            for i in range(len(landmarks["right_eye"])):
-                landmarks["right_eye"][i] = list(landmarks["right_eye"][i])
-                landmarks["right_eye"][i][0] += box[3]
-                landmarks["right_eye"][i][1] += box[0]
+        # Iterate all detections
+        for i in range(detections.shape[2]):
+            confidence = detections[0, 0, i, 2]
 
-        box = list(box_faces[0])
-        img_face = cropAndAlign(img, box, landmarks)
-        if(np.min(np.shape(img_face)) != 0):
-            faces.append(cv2.resize(img_face, (height, width)))
+            # Detected face
+            if confidence > confidence_threshold:
+                x1 = int(detections[0, 0, i, 3] * frame_width)
+                y1 = int(detections[0, 0, i, 4] * frame_height)
+                x2 = int(detections[0, 0, i, 5] * frame_width)
+                y2 = int(detections[0, 0, i, 6] * frame_height)
+                face_width = x2 - x1
+                face_height = y2 - y1
+
+                # Make detected area square
+                if face_height < face_width:
+                    coordinate_change = (face_width - face_height) // 2
+                    x1 += coordinate_change
+                    x2 -= coordinate_change
+                else:
+                    coordinate_change = (face_height - face_width) // 2
+                    y1 += coordinate_change
+                    y2 -= coordinate_change
+                face = cv2.resize(frame[y1:y2, x1:x2], image_size)
+                faces.append(face)
     return faces
 
 
@@ -241,6 +235,8 @@ def test(print_time=True):
     # Load model
     print("Loading model")
     t_start_program = time.time()
+    net = cv2.dnn.readNetFromCaffe(
+        FACE_DETECTION_CONFIG_FILE, FACE_DETECTION_MODEL_FILE)
     model = load_model(MODEL_PATH)
     model_loading_time = round(time.time() - t_start_program, 2)
     print("Model loading time: {}s".format(model_loading_time))
@@ -257,7 +253,8 @@ def test(print_time=True):
         # Crop faces from test video
         t_start_video = time.time()
         faces_in_video = getFaces(
-            TEST_DATA_DIRECTORY + '/' + file_name, IMAGE_SIZE, EVERY_ITH_FRAME)
+            TEST_DATA_DIRECTORY + '/' + file_name, IMAGE_SIZE, net,
+            EVERY_ITH_FRAME)
         faces_loading_time = round(time.time() - t_start_video, 2)
 
         # Predict score for each face
@@ -327,9 +324,9 @@ def train():
 
 
 def main():
-    createTrainData()
+    #createTrainData()
     #train()
-    #test()
+    test()
 
 
 main()
