@@ -21,7 +21,8 @@ IMAGE_SIZE = (224, 224)
 LEARNING_RATE = 0.0001
 
 # Training and testing paths
-MODEL_PATH = "../input/resnet-model/resnet50_best.h5"
+CREATE_MODEL_PATH = "resnet50_best.h5"
+LOAD_MODEL_PATH = "../input/resnet-model/resnet50_best.h5"
 RAW_TRAIN_DATA_DIRECTORY = "../input/deepfake-detection-challenge/train_sample_videos"
 LABELS_PATH = "../input/deepfake-detection-challenge/metadata.json"
 SUBMISSION_CSV = "../input/deepfake-detection-challenge/sample_submission.csv"
@@ -237,7 +238,7 @@ def test(print_time=True):
     t_start_program = time.time()
     net = cv2.dnn.readNetFromCaffe(
         FACE_DETECTION_CONFIG_FILE, FACE_DETECTION_MODEL_FILE)
-    model = load_model(MODEL_PATH)
+    model = load_model(LOAD_MODEL_PATH)
     model_loading_time = round(time.time() - t_start_program, 2)
     print("Model loading time: {}s".format(model_loading_time))
 
@@ -311,7 +312,7 @@ def train():
         # Fit data
         early_stopping = EarlyStopping(patience=10)
         checkpointer = ModelCheckpoint(
-            MODEL_PATH, verbose=1, save_best_only=True)
+            CREATE_MODEL_PATH, verbose=1, save_best_only=True)
         model.fit_generator(
             train_batches,
             steps_per_epoch=getNumberOfSteps(TRAIN_DIRECTORY, BATCH_SIZE),
