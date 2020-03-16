@@ -250,42 +250,47 @@ def test(print_time=True):
     print("Cropping faces from videos")
     number_of_videos = len(os.listdir(TEST_DATA_DIRECTORY))
     for i, file_name in enumerate(sorted(os.listdir(TEST_DATA_DIRECTORY))):
+        try:
 
-        # Crop faces from test video
-        t_start_video = time.time()
-        faces_in_video = getFaces(
-            TEST_DATA_DIRECTORY + '/' + file_name, IMAGE_SIZE, net,
-            EVERY_ITH_FRAME)
-        faces_loading_time = round(time.time() - t_start_video, 2)
+            # Crop faces from test video
+            t_start_video = time.time()
+            faces_in_video = getFaces(
+                TEST_DATA_DIRECTORY + '/' + file_name, IMAGE_SIZE, net,
+                EVERY_ITH_FRAME)
+            faces_loading_time = round(time.time() - t_start_video, 2)
 
-        # Predict score for each face
-        predictions = []
-        t_start_predicting = time.time()
-        for face in faces_in_video:
-            face = np.expand_dims(face, axis=0)
-            predictions.append(model.predict(face)[0])
-        t_video_processed = time.time()
-        prediction_time = round(t_video_processed - t_start_predicting, 2)
-        total_spent_time = int((t_video_processed - t_start_program) / 60)
+            # Predict score for each face
+            predictions = []
+            t_start_predicting = time.time()
+            for face in faces_in_video:
+                face = np.expand_dims(face, axis=0)
+                predictions.append(model.predict(face)[0])
+            t_video_processed = time.time()
+            prediction_time = round(t_video_processed - t_start_predicting, 2)
+            total_spent_time = int((t_video_processed - t_start_program) / 60)
 
-        # Print processing times
-        if print_time:
-            print((
-                "Video: {:5}/{}, {:20}. Number of faces: {:5}. " +
-                "Cropping faces time: {:7}s. Prediction time: {:6}s. " +
-                "Total time: {:4}min").format(
-                    i+1, number_of_videos, file_name, len(faces_in_video),
-                    faces_loading_time, prediction_time, total_spent_time))
-        else:
-            print("Video: {}/{}".format(i+1, number_of_videos))
+            # Print processing times
+            if print_time:
+                print((
+                    "Video: {:5}/{}, {:20}. Number of faces: {:5}. " +
+                    "Cropping faces time: {:7}s. Prediction time: {:6}s. " +
+                    "Total time: {:4}min").format(
+                        i+1, number_of_videos, file_name, len(faces_in_video),
+                        faces_loading_time, prediction_time, total_spent_time))
+            else:
+                print("Video: {}/{}".format(i+1, number_of_videos))
 
-        # Compute final score for video and write to CSV
-        video_score = 0.5
-        if len(predictions) > 0:
-            predictions = np.array(predictions)
-            fake_scores = predictions[:, 0]
-            real_scores = predictions[:, 1]
-            video_score = np.mean((real_scores - fake_scores + 1) / 2)
+            # Compute final score for video and write to CSV
+            video_score = 0.5
+            if len(predictions) > 0:
+                predictions = np.array(predictions)
+                fake_scores = predictions[:, 0]
+                real_scores = predictions[:, 1]
+                video_score = np.mean((real_scores - fake_scores + 1) / 2)
+        except Exception as e:
+            video_score = 0.5
+
+        # Write video file name and score
         submission_file.at[i, "filename"] = file_name
         submission_file.at[i, "label"] = video_score
 
