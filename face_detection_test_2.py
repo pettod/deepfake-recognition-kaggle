@@ -1,4 +1,5 @@
 import cv2
+import time
 
 
 MODEL_FILE = "../input/face-detection-config-files/res10_300x300_ssd_iter_140000_fp16.caffemodel"
@@ -15,12 +16,20 @@ def getFaces(
     if (not cap.isOpened()):
         print("Cannot open video:", path)
         return faces
+    i_frame = 1
     while(cap.isOpened()):
 
         # Read video frame
         ret, frame = cap.read()
         if not ret:
             break
+
+        # Skip frames and read only every i'th frame
+        if i_frame != every_ith_frame:
+            i_frame += 1
+            continue
+        else:
+            i_frame = 1
         frame_height = frame.shape[0]
         frame_width = frame.shape[1]
 
@@ -62,8 +71,12 @@ def getFaces(
 
 if __name__ == "__main__":
     net = cv2.dnn.readNetFromCaffe(CONFIG_FILE, MODEL_FILE)
+    t_start_detect_faces = time.time()
     faces_in_video = getFaces(VIDEO_PATH, IMAGE_SIZE, net, EVERY_ITH_FRAME)
-    print("Number of detected faces in video:", len(faces_in_video))
+    face_detection_time = round(time.time() - t_start_detect_faces, 2)
+    print("Number of detected faces: {}. Face detection time: {}s".format(
+            len(faces_in_video), face_detection_time))
+    exit()
     for face in faces_in_video:
         cv2.imshow("face", face)
         cv2.waitKey(0)
