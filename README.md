@@ -2,7 +2,7 @@
 
 ## Introduction
 
-Deepfake recognition from 10 seconds long videos. The structure of the code is been designed to be mainly in one file because of Kaggle competition makes it easier to have everything in one file.
+Deepfake recognition from 10 seconds long videos. The structure of the code is been designed to be mainly in one file because of Kaggle competition which makes it easier to have everything in one file.
 
 ## Installation
 
