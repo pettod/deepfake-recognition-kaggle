@@ -17,7 +17,7 @@ from main import \
 
 
 EVERY_ITH_FRAME = 10
-MAX_NUMBER_OF_FACES_PER_VIDEO = 3
+NUMBER_OF_FACES_PER_VIDEO = 5
 TARGET_PATH_FAKE = TRAIN_DIRECTORY + "/fake"
 TARGET_PATH_REAL = TRAIN_DIRECTORY + "/real"
 
@@ -39,11 +39,17 @@ def createTrainData(print_time=True):
             RAW_TRAIN_DATA_DIRECTORY + '/' + file_name, IMAGE_SIZE, net,
             EVERY_ITH_FRAME)
 
+        # Don't take this video if not enough detected faces
+        if NUMBER_OF_FACES_PER_VIDEO > len(faces_in_video):
+            print((
+                "No saved faces from video: {}. " +
+                "Number of detected faces: {}").format(
+                    file_name, len(faces_in_video)))
+            continue
+
         # Pick random faces
-        number_of_picked_faces = min(
-            len(faces_in_video), MAX_NUMBER_OF_FACES_PER_VIDEO)
         random_face_indices = sorted(random.sample(
-            range(len(faces_in_video)), number_of_picked_faces))
+            range(len(faces_in_video)), NUMBER_OF_FACES_PER_VIDEO))
         picked_faces = [
             face for j, face in enumerate(faces_in_video)
             if j in random_face_indices]
