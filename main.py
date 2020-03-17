@@ -86,13 +86,15 @@ def cropAndAlign(
 
 
 def getFaces(
-        path, image_size, net, every_ith_frame=1, confidence_threshold=0.5):
+        path, image_size, net, every_ith_frame=1, confidence_threshold=0.5,
+        only_one_face_per_frame=False):
     cap = cv2.VideoCapture(path)
     faces = []
+    i_frame = 1
+    first_face_coordinates = []
     if (not cap.isOpened()):
         print("Cannot open video:", path)
         return faces
-    i_frame = 1
     while(cap.isOpened()):
 
         # Read video frame
@@ -116,6 +118,8 @@ def getFaces(
         detections = net.forward()
 
         # Iterate all detections
+        multiple_faces_per_frame = []
+        face_coordinates = []
         for i in range(detections.shape[2]):
             confidence = detections[0, 0, i, 2]
 
@@ -138,7 +142,54 @@ def getFaces(
                     y1 += coordinate_change
                     y2 -= coordinate_change
                 face = cv2.resize(frame[y1:y2, x1:x2], image_size)
-                faces.append(face)
+                if not only_one_face_per_frame:
+                    faces.append(face)
+                else:
+                    multiple_faces_per_frame.append(face)
+                    face_coordinates.append([x1, y1, x2, y2])
+
+        # Add only one face from frame, and should be the same face
+        if only_one_face_per_frame and len(multiple_faces_per_frame) > 0:
+
+            # Add first face from first frame (from which the face was
+            # detected, for example first time detected from frame 5)
+            if len(faces) == 0:
+                x1 = face_coordinates[0][0]
+                y1 = face_coordinates[0][1]
+                x2 = face_coordinates[0][2]
+                y2 = face_coordinates[0][3]
+                faces.append(multiple_faces_per_frame[0])
+                first_face_coordinates = [x1, y1, x2, y2]
+
+            # If frame has multiple detected faces, add the closest
+            # corresponding to the face detected from first frame
+            elif len(multiple_faces_per_frame) > 1:
+                closest_face_index = 0
+                closest_distance = 4000*4000*4
+                x1_a = first_face_coordinates[0]
+                y1_a = first_face_coordinates[1]
+                x2_a = first_face_coordinates[2]
+                y2_a = first_face_coordinates[3]
+                for i in range(len(multiple_faces_per_frame)):
+                    x1_b = face_coordinates[i][0]
+                    y1_b = face_coordinates[i][1]
+                    x2_b = face_coordinates[i][2]
+                    y2_b = face_coordinates[i][3]
+                    face_distance = (
+                        (x1_a - x1_b) ** 2 +
+                        (y1_a - y1_b) ** 2 +
+                        (x2_a - x2_b) ** 2 +
+                        (y2_a - y2_b) ** 2)
+                    if face_distance < closest_distance:
+                        closest_distance = face_distance
+                        closest_face_index = i
+                faces.append(multiple_faces_per_frame[closest_face_index])
+
+            # Add only one detected face, could make errors if video has for
+            # example 2 faces, but sometimes only 1 face is detected
+            else:
+                faces.append(multiple_faces_per_frame[0])
+
     return faces
 
 

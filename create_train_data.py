@@ -18,6 +18,7 @@ from main import \
 
 EVERY_ITH_FRAME = 10
 NUMBER_OF_FACES_PER_VIDEO = 5
+ONLY_ONE_FACE_PER_FRAME = True
 TARGET_PATH_FAKE = TRAIN_DIRECTORY + "/fake"
 TARGET_PATH_REAL = TRAIN_DIRECTORY + "/real"
 
@@ -37,7 +38,7 @@ def createTrainData(print_time=True):
         t_start_video = time.time()
         faces_in_video = getFaces(
             RAW_TRAIN_DATA_DIRECTORY + '/' + file_name, IMAGE_SIZE, net,
-            EVERY_ITH_FRAME)
+            EVERY_ITH_FRAME, only_one_face_per_frame=ONLY_ONE_FACE_PER_FRAME)
 
         # Don't take this video if not enough detected faces
         if NUMBER_OF_FACES_PER_VIDEO > len(faces_in_video):
