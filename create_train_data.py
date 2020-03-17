@@ -8,6 +8,7 @@ import time
 from main import \
     getFaces, \
     loadLabels, \
+    EVERY_ITH_FRAME, \
     FACE_DETECTION_CONFIG_FILE, \
     FACE_DETECTION_MODEL_FILE, \
     IMAGE_SIZE, \
@@ -18,7 +19,6 @@ from main import \
     TRAIN_DIRECTORY
 
 
-EVERY_ITH_FRAME = 10
 TARGET_PATH_FAKE = TRAIN_DIRECTORY + "/fake"
 TARGET_PATH_REAL = TRAIN_DIRECTORY + "/real"
 

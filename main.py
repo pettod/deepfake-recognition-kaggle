@@ -19,10 +19,10 @@ import time
 # Hyperparameters
 BATCH_SIZE = 16
 EPOCHS = 1000
-EVERY_ITH_FRAME = 10
+EVERY_ITH_FRAME = 5
 IMAGE_SIZE = (224, 224)
 LEARNING_RATE = 0.0001
-NUMBER_OF_FACES_PER_VIDEO = 5
+NUMBER_OF_FACES_PER_VIDEO = 10
 ONLY_ONE_FACE_PER_FRAME = True
 
 # Training and testing paths
@@ -427,8 +427,8 @@ def test(print_time=True):
             number_of_samples = int(
                 gray_faces.shape[-1] / NUMBER_OF_FACES_PER_VIDEO)
             for j in range(number_of_samples):
-                start_index = j * number_of_samples
-                end_index = (j+1) * number_of_samples
+                start_index = j * NUMBER_OF_FACES_PER_VIDEO
+                end_index = (j+1) * NUMBER_OF_FACES_PER_VIDEO
                 sample = np.expand_dims(
                     gray_faces[..., start_index:end_index], axis=0)
                 predictions.append(model.predict(sample)[0])
@@ -476,7 +476,8 @@ def train():
             VALIDATION_DIRECTORY, IMAGE_SIZE, BATCH_SIZE)
 
         # Create model
-        model = resnet_v1((224, 224, 5), depth=20, num_classes=2)
+        input_shape = (IMAGE_SIZE[0], IMAGE_SIZE[1], NUMBER_OF_FACES_PER_VIDEO)
+        model = resnet_v1(input_shape, depth=20, num_classes=2)
         model.compile(
             optimizer=Adam(lr=LEARNING_RATE), loss="binary_crossentropy",
             metrics=["accuracy"])
