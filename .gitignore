@@ -12,4 +12,4 @@ models/*
 *.prototxt
 *.pbtxt
 *.caffemodel
-
+*.pyc
