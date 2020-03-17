@@ -419,12 +419,19 @@ def test(print_time=True):
                 EVERY_ITH_FRAME)
             faces_loading_time = round(time.time() - t_start_video, 2)
 
-            # Predict score for each face
+            # Predict score for each stack of face
             predictions = []
             t_start_predicting = time.time()
-            for face in faces_in_video:
-                face = np.expand_dims(face, axis=0)
-                predictions.append(model.predict(face)[0])
+            gray_faces = np.moveaxis(np.mean(np.array(
+                faces_in_video), axis=-1), 0, -1)
+            number_of_samples = int(
+                gray_faces.shape[-1] / NUMBER_OF_FACES_PER_VIDEO)
+            for j in range(number_of_samples):
+                start_index = j * number_of_samples
+                end_index = (j+1) * number_of_samples
+                sample = np.expand_dims(
+                    gray_faces[..., start_index:end_index], axis=0)
+                predictions.append(model.predict(sample)[0])
             t_video_processed = time.time()
             prediction_time = round(t_video_processed - t_start_predicting, 2)
             total_spent_time = int((t_video_processed - t_start_program) / 60)
@@ -490,5 +497,5 @@ def train():
 
 
 if __name__ == "__main__":
-    train()
-    #test()
+    #train()
+    test()
