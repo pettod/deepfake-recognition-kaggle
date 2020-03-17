@@ -12,13 +12,13 @@ from main import \
     FACE_DETECTION_MODEL_FILE, \
     IMAGE_SIZE, \
     LABELS_PATH, \
+    NUMBER_OF_FACES_PER_VIDEO, \
+    ONLY_ONE_FACE_PER_FRAME, \
     RAW_TRAIN_DATA_DIRECTORY, \
     TRAIN_DIRECTORY
 
 
 EVERY_ITH_FRAME = 10
-NUMBER_OF_FACES_PER_VIDEO = 5
-ONLY_ONE_FACE_PER_FRAME = True
 TARGET_PATH_FAKE = TRAIN_DIRECTORY + "/fake"
 TARGET_PATH_REAL = TRAIN_DIRECTORY + "/real"
 
@@ -62,9 +62,11 @@ def createTrainData(print_time=True):
         path = TARGET_PATH_FAKE
         if labels[i]:
             path = TARGET_PATH_REAL
-        for j, face in enumerate(picked_faces):
-            sample_file_name = "{}_{}.png".format(str(i+1), str(j+1))
-            cv2.imwrite(path + '/' + sample_file_name, face)
+
+        # Horizontally concatenate faces
+        sample_image = cv2.hconcat(picked_faces)
+        sample_file_name = "{}.png".format(str(i+1))
+        cv2.imwrite(path + '/' + sample_file_name, cv2.hconcat(picked_faces))
 
         # Print processing times
         if print_time:
