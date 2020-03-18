@@ -416,7 +416,18 @@ def test(print_time=True):
             t_start_video = time.time()
             faces_in_video = getFaces(
                 TEST_DATA_DIRECTORY + '/' + file_name, IMAGE_SIZE, net,
-                EVERY_ITH_FRAME)
+                EVERY_ITH_FRAME,
+                only_one_face_per_frame=ONLY_ONE_FACE_PER_FRAME)
+
+            # Not enough detected faces, lower confidence
+            if len(faces_in_video) < NUMBER_OF_FACES_PER_VIDEO:
+                print((
+                    "Too few detected faces, lowering confidence, video: " +
+                    "{}/{}, {}").format(i+1, number_of_videos, file_name))
+                faces_in_video = getFaces(
+                    TEST_DATA_DIRECTORY + '/' + file_name, IMAGE_SIZE, net,
+                    EVERY_ITH_FRAME, confidence_threshold=0.4,
+                    only_one_face_per_frame=ONLY_ONE_FACE_PER_FRAME)
             faces_loading_time = round(time.time() - t_start_video, 2)
 
             # Predict score for each stack of face
