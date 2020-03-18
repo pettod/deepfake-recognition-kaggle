@@ -29,6 +29,12 @@ def createTrainData(print_time=True):
     net = cv2.dnn.readNetFromCaffe(
         FACE_DETECTION_CONFIG_FILE, FACE_DETECTION_MODEL_FILE)
 
+    # Create paths if not existing
+    if not os.path.isdir(TARGET_PATH_FAKE):
+        os.makedirs(TARGET_PATH_FAKE)
+    if not os.path.isdir(TARGET_PATH_REAL):
+        os.makedirs(TARGET_PATH_REAL)
+
     # Iterate training videos
     number_of_videos = len(os.listdir(RAW_TRAIN_DATA_DIRECTORY))
     for i, file_name in enumerate(sorted(os.listdir(
