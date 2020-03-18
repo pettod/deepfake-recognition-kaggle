@@ -46,6 +46,16 @@ def createTrainData(print_time=True):
             RAW_TRAIN_DATA_DIRECTORY + '/' + file_name, IMAGE_SIZE, net,
             EVERY_ITH_FRAME, only_one_face_per_frame=ONLY_ONE_FACE_PER_FRAME)
 
+        # Not enough detected faces, lower confidence
+        if len(faces_in_video) < NUMBER_OF_FACES_PER_VIDEO:
+            print((
+                "Too few detected faces, lowering confidence, video: " +
+                "{}/{}, {}").format(i+1, number_of_videos, file_name))
+            faces_in_video = getFaces(
+                RAW_TRAIN_DATA_DIRECTORY + '/' + file_name, IMAGE_SIZE, net,
+                EVERY_ITH_FRAME, confidence_threshold=0.4,
+                only_one_face_per_frame=ONLY_ONE_FACE_PER_FRAME)
+
         # Don't take this video if not enough detected faces
         if NUMBER_OF_FACES_PER_VIDEO > len(faces_in_video):
             print((
