@@ -474,10 +474,15 @@ def test(print_time=True):
             # Compute final score for video and write to CSV
             video_score = 0.5
             if len(predictions) > 0:
-                predictions = np.array(predictions)
-                fake_scores = predictions[:, 0]
-                real_scores = predictions[:, 1]
-                video_score = np.mean((real_scores - fake_scores + 1) / 2)
+                final_scores = []
+                for prediction in predictions:
+                    fake_score = prediction[0]
+                    real_score = prediction[1]
+                    if fake_score > real_score:
+                        final_scores.append(1 - fake_score)
+                    else:
+                        final_scores.append(real_score)
+                video_score = np.mean(np.array(final_scores))
         except Exception as e:
             print("Exception thrown, video: {}/{}, {}".format(
                 i+1, number_of_videos, file_name))
