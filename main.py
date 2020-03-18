@@ -508,7 +508,7 @@ def train():
 
         # Create model
         input_shape = (IMAGE_SIZE[0], IMAGE_SIZE[1], NUMBER_OF_FACES_PER_VIDEO)
-        model = resnet_v1(input_shape, depth=20, num_classes=2)
+        model = resnet_v1(input_shape, depth=56, num_classes=2)
         model.compile(
             optimizer=Adam(lr=LEARNING_RATE), loss="binary_crossentropy",
             metrics=["accuracy"])
