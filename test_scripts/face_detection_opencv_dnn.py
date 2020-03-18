@@ -1,10 +1,11 @@
 import cv2
 import time
+import numpy as np
 
 
 MODEL_FILE = "../input/face-detection-config-files/res10_300x300_ssd_iter_140000_fp16.caffemodel"
 CONFIG_FILE = "../input/face-detection-config-files/deploy.prototxt"
-VIDEO_PATH = "../input/deepfake-detection-challenge/test_videos/gahgyuwzbu.mp4"
+VIDEO_PATH = "../input/deepfake-detection-challenge/aajxdztmpb.mp4"
 EVERY_ITH_FRAME = 10
 IMAGE_SIZE = (224, 224)
 
@@ -49,6 +50,10 @@ def getFaces(
                 y1 = int(detections[0, 0, i, 4] * frame_height)
                 x2 = int(detections[0, 0, i, 5] * frame_width)
                 y2 = int(detections[0, 0, i, 6] * frame_height)
+                x1 = min(np.shape(frame)[1], max(0, x1))
+                x2 = min(np.shape(frame)[1], max(0, x2))
+                y1 = min(np.shape(frame)[0], max(0, y1))
+                y2 = min(np.shape(frame)[0], max(0, y2))
                 face_width = x2 - x1
                 face_height = y2 - y1
 

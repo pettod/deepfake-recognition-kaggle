@@ -131,9 +131,15 @@ def getFaces(
             # Detected face
             if confidence > confidence_threshold:
                 x1 = int(detections[0, 0, i, 3] * frame_width)
-                y1 = int(detections[0, 0, i, 4] * frame_height)
                 x2 = int(detections[0, 0, i, 5] * frame_width)
+                y1 = int(detections[0, 0, i, 4] * frame_height)
                 y2 = int(detections[0, 0, i, 6] * frame_height)
+
+                # Limit coordinates if they go over frame boundaries
+                x1 = min(np.shape(frame)[1], max(0, x1))
+                x2 = min(np.shape(frame)[1], max(0, x2))
+                y1 = min(np.shape(frame)[0], max(0, y1))
+                y2 = min(np.shape(frame)[0], max(0, y2))
                 face_width = x2 - x1
                 face_height = y2 - y1
 
@@ -147,6 +153,8 @@ def getFaces(
                     y1 += coordinate_change
                     y2 -= coordinate_change
                 face = cv2.resize(frame[y1:y2, x1:x2], image_size)
+
+                # Save all faces or only one from each frame
                 if not only_one_face_per_frame:
                     faces.append(face)
                 else:
