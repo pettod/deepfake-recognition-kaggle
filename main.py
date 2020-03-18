@@ -460,6 +460,8 @@ def test(print_time=True):
                 real_scores = predictions[:, 1]
                 video_score = np.mean((real_scores - fake_scores + 1) / 2)
         except Exception as e:
+            print("Exception thrown, video: {}/{}, {}".format(
+                i+1, number_of_videos, file_name))
             video_score = 0.5
 
         # Write video file name and score
