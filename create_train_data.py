@@ -39,6 +39,15 @@ def createTrainData(print_time=True):
     number_of_videos = len(os.listdir(RAW_TRAIN_DATA_DIRECTORY))
     for i, file_name in enumerate(sorted(os.listdir(
             RAW_TRAIN_DATA_DIRECTORY))):
+        sample_file_name = "{}.png".format(file_name.split('.')[0])
+
+        # Skip video face cropping if it is done in previous session
+        if os.path.exists(TARGET_PATH_FAKE + '/' + sample_file_name) or \
+                os.path.exists(TARGET_PATH_REAL + '/' + sample_file_name):
+            print((
+                "Skipping video '{}'. It is processed in the previous " +
+                "session.").format(file_name))
+            continue
 
         # Crop faces from train video
         t_start_video = time.time()
@@ -81,7 +90,6 @@ def createTrainData(print_time=True):
 
         # Horizontally concatenate faces
         sample_image = cv2.hconcat(picked_faces)
-        sample_file_name = "{}.png".format(str(i+1))
         cv2.imwrite(path + '/' + sample_file_name, cv2.hconcat(picked_faces))
 
         # Print processing times
