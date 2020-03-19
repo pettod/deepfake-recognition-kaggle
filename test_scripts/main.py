@@ -218,9 +218,6 @@ def test(feature_path='models/feature_test.dat', save_feature_path='models/featu
     writeSubmissionFile(test_video_file_names, classes)
 
 
-def main():    
+if __name__ == "__main_":
     train(None)
     test(None)
-
-
-main()

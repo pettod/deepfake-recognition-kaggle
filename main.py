@@ -16,25 +16,23 @@ import tensorflow as tf
 import time
 
 
-# Hyperparameters
+# Data parameters
 BATCH_SIZE = 16
-EPOCHS = 1000
 EVERY_ITH_FRAME = 5
 IMAGE_SIZE = (224, 224)
-LEARNING_RATE = 0.0001
 NUMBER_OF_FACES_PER_VIDEO = 10
 ONLY_ONE_FACE_PER_FRAME = True
 
 # Training and testing paths
 CREATE_MODEL_PATH = "resnet50_best.h5"
+LABELS_PATH = "../input/deepfake-detection-challenge/metadata.json"
 LOAD_MODEL_PATH = "../input/resnet-model/resnet50_best.h5"
 RAW_TRAIN_DATA_DIRECTORY = "../input/deepfake-detection-challenge/train_sample_videos"
-LABELS_PATH = "../input/deepfake-detection-challenge/metadata.json"
 SUBMISSION_CSV = "../input/deepfake-detection-challenge/sample_submission.csv"
 TEST_DATA_DIRECTORY = "../input/deepfake-detection-challenge/test_videos"
 TRAIN_DATA_DIRECTORY = "../input/cropped-faces"
 TRAIN_DIRECTORY = TRAIN_DATA_DIRECTORY + "/train"
-VALIDATION_DIRECTORY = TRAIN_DATA_DIRECTORY + "/train"
+VALIDATION_DIRECTORY = TRAIN_DATA_DIRECTORY + "/validation"
 
 # Face detection model paths
 FACE_DETECTION_MODEL_FILE = "../input/face-detection-config-files/res10_300x300_ssd_iter_140000_fp16.caffemodel"
@@ -510,7 +508,7 @@ def train():
         input_shape = (IMAGE_SIZE[0], IMAGE_SIZE[1], NUMBER_OF_FACES_PER_VIDEO)
         model = resnet_v1(input_shape, depth=56, num_classes=2)
         model.compile(
-            optimizer=Adam(lr=LEARNING_RATE), loss="binary_crossentropy",
+            optimizer=Adam(lr=0.0001), loss="binary_crossentropy",
             metrics=["accuracy"])
 
         # Fit data
@@ -520,7 +518,7 @@ def train():
         model.fit_generator(
             train_batches,
             steps_per_epoch=getNumberOfSteps(TRAIN_DIRECTORY, BATCH_SIZE),
-            epochs=EPOCHS,
+            epochs=1000,
             callbacks=[early_stopping, checkpointer],
             validation_data=validation_batches,
             validation_steps=getNumberOfSteps(
