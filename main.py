@@ -219,13 +219,8 @@ def getBatchGenerator(data_directory, image_size, batch_size):
         video_faces, labels = batches.next()
         batch_samples = []
         for i in range(len(video_faces)):
-            gray_faces = np.mean(video_faces[i], axis=-1)
-            sample = []
-            for j in range(NUMBER_OF_FACES_PER_VIDEO):
-                start_index = j * image_size[1]
-                end_index = (j+1) * image_size[1]
-                sample.append(gray_faces[:, start_index:end_index])
-            batch_samples.append(np.moveaxis(np.array(sample), 0, -1))
+            batch_samples.append(stackFacesFromSample(
+                video_faces[i], image_size))
         yield np.array(batch_samples), labels
 
 
@@ -397,6 +392,16 @@ def rotatePoint(p, c, rad_angle):
     p = [int(p[0] * math.cos(rad_angle) - p[1] * math.sin(rad_angle) + c[0]),
          int(p[0] * math.sin(rad_angle) + p[1] * math.cos(rad_angle) + c[1])]
     return p
+
+
+def stackFacesFromSample(horizontal_concatenated_sample, image_size):
+    gray_faces = np.mean(horizontal_concatenated_sample, axis=-1)
+    sample = []
+    for j in range(NUMBER_OF_FACES_PER_VIDEO):
+        start_index = j * image_size[1]
+        end_index = (j+1) * image_size[1]
+        sample.append(gray_faces[:, start_index:end_index])
+    return np.moveaxis(np.array(sample), 0, -1)
 
 
 def test(print_time=True):
