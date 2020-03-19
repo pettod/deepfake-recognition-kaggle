@@ -21,16 +21,17 @@ BATCH_SIZE = 16
 EVERY_ITH_FRAME = 5
 IMAGE_SIZE = (224, 224)
 NUMBER_OF_FACES_PER_VIDEO = 10
+NUMBER_OF_CNN_LAYERS = 56
 ONLY_ONE_FACE_PER_FRAME = True
 
 # Training and testing paths
-CREATE_MODEL_PATH = "resnet50_best.h5"
+CNN_MODEL_FILE_NAME = "resnet{}_best.h5".format(NUMBER_OF_CNN_LAYERS)
 LABELS_PATH = "../input/deepfake-detection-challenge/metadata.json"
-LOAD_MODEL_PATH = "../input/resnet-model/resnet50_best.h5"
+LOAD_MODEL_PATH = "../input/resnet-model/{}".format(CNN_MODEL_FILE_NAME)
 RAW_TRAIN_DATA_DIRECTORY = "../input/deepfake-detection-challenge/train_sample_videos"
 SUBMISSION_CSV = "../input/deepfake-detection-challenge/sample_submission.csv"
 TEST_DATA_DIRECTORY = "../input/deepfake-detection-challenge/test_videos"
-TRAIN_DATA_DIRECTORY = "../input/cropped-faces"
+TRAIN_DATA_DIRECTORY = "../input/cropped-faces-{}".format(NUMBER_OF_FACES_PER_VIDEO)
 TRAIN_DIRECTORY = TRAIN_DATA_DIRECTORY + "/train"
 VALIDATION_DIRECTORY = TRAIN_DATA_DIRECTORY + "/validation"
 
@@ -498,6 +499,13 @@ def test(print_time=True):
 def train():
     with tf.device("/device:GPU:0"):
 
+        # Check train and validation directories exist
+        all_paths = [TRAIN_DIRECTORY, VALIDATION_DIRECTORY]
+        for path in all_paths:
+            if not os.path.isdir(path):
+                print("Directory does not exist: {}".format(path))
+                return
+
         # Load batch generators
         train_batches = getBatchGenerator(
             TRAIN_DIRECTORY, IMAGE_SIZE, BATCH_SIZE)
@@ -506,7 +514,8 @@ def train():
 
         # Create model
         input_shape = (IMAGE_SIZE[0], IMAGE_SIZE[1], NUMBER_OF_FACES_PER_VIDEO)
-        model = resnet_v1(input_shape, depth=56, num_classes=2)
+        model = resnet_v1(
+            input_shape, depth=NUMBER_OF_CNN_LAYERS, num_classes=2)
         model.compile(
             optimizer=Adam(lr=0.0001), loss="binary_crossentropy",
             metrics=["accuracy"])
@@ -514,7 +523,7 @@ def train():
         # Fit data
         early_stopping = EarlyStopping(patience=10)
         checkpointer = ModelCheckpoint(
-            CREATE_MODEL_PATH, verbose=1, save_best_only=True)
+            CNN_MODEL_FILE_NAME, verbose=1, save_best_only=True)
         model.fit_generator(
             train_batches,
             steps_per_epoch=getNumberOfSteps(TRAIN_DIRECTORY, BATCH_SIZE),
@@ -523,7 +532,7 @@ def train():
             validation_data=validation_batches,
             validation_steps=getNumberOfSteps(
                 VALIDATION_DIRECTORY, BATCH_SIZE))
-        model.save("resnet50_final.h5")
+        model.save("resnet{}_final.h5".format(NUMBER_OF_CNN_LAYERS))
 
 
 if __name__ == "__main__":
