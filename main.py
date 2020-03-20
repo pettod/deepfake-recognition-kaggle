@@ -91,7 +91,7 @@ def cropAndAlign(
 
 def getFaces(
         path, image_size, net, every_ith_frame=1, confidence_threshold=0.5,
-        only_one_face_per_frame=False):
+        only_one_face_per_frame=False, remove_outliers=True):
     cap = cv2.VideoCapture(path)
     faces = []
     i_frame = 1
@@ -202,6 +202,9 @@ def getFaces(
             else:
                 faces.append(multiple_faces_per_frame[0])
 
+    if remove_outliers:
+        faces, outliers = removeOutliers(faces)
+
     return faces
 
 
@@ -265,6 +268,36 @@ def lr_schedule(epoch):
         lr *= 1e-1
     print('Learning rate: ', lr)
     return lr
+
+
+def removeOutliers(faces_in_video):
+    # No faces in list
+    if len(faces_in_video) == 0:
+        return [], []
+
+    # Compute similarity scores
+    faces_array = np.array(faces_in_video)
+    face_mean = np.mean(faces_array, axis=0).astype(np.uint8)
+    similarity_scores = []
+    for i, face in enumerate(faces_in_video):
+        l1_color_error = np.mean(np.abs(face_mean - face))
+        similarity_scores.append(int(l1_color_error))
+
+    # Define outlier threshold
+    similarity_median = np.median(similarity_scores)
+    outlier_threshold = 2*similarity_median
+    true_faces = []
+    outliers = []
+
+    # Find outliers and true faces
+    for i, face in enumerate(faces_in_video):
+        face_similarity_score = similarity_scores[i]
+        if face_similarity_score > outlier_threshold:
+            outliers.append(face)
+        else:
+            true_faces.append(face)
+
+    return true_faces, outliers
 
 
 def resnet_layer(inputs,
