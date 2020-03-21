@@ -270,7 +270,7 @@ def lr_schedule(epoch):
     return lr
 
 
-def removeOutliers(faces_in_video):
+def removeOutliers(faces_in_video, outlier_detection_factor=1.5):
     # No faces in list
     if len(faces_in_video) == 0:
         return [], []
@@ -285,7 +285,7 @@ def removeOutliers(faces_in_video):
 
     # Define outlier threshold
     similarity_median = np.median(similarity_scores)
-    outlier_threshold = 2*similarity_median
+    outlier_threshold = outlier_detection_factor*similarity_median
     true_faces = []
     outliers = []
 

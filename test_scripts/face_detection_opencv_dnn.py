@@ -26,7 +26,7 @@ def removeOutliers(faces_in_video):
 
     # Define outlier threshold
     similarity_median = np.median(similarity_scores)
-    outlier_threshold = 2*similarity_median
+    outlier_threshold = 1.5*similarity_median
     true_faces = []
     outliers = []
 
