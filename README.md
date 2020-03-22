@@ -7,7 +7,7 @@ Deepfake recognition from 10 seconds long videos. The structure of the code is b
 ## Installation
 
 ```bash
-pip install -r requirements.txt
+pip install -e .
 ```
 
 ## Dependencies
