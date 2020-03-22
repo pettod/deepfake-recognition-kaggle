@@ -89,13 +89,43 @@ def cropAndAlign(
     return img
 
 
+def cropFixedSizedFaceFromCoordinates(detections, i, frame, image_size):
+    frame_height = frame.shape[0]
+    frame_width = frame.shape[1]
+
+    x1 = int(detections[0, 0, i, 3] * frame_width)
+    x2 = int(detections[0, 0, i, 5] * frame_width)
+    y1 = int(detections[0, 0, i, 4] * frame_height)
+    y2 = int(detections[0, 0, i, 6] * frame_height)
+
+    # Limit coordinates if they go over frame boundaries
+    x1 = min(np.shape(frame)[1], max(0, x1))
+    x2 = min(np.shape(frame)[1], max(0, x2))
+    y1 = min(np.shape(frame)[0], max(0, y1))
+    y2 = min(np.shape(frame)[0], max(0, y2))
+    face_width = x2 - x1
+    face_height = y2 - y1
+
+    # Make detected area square
+    if face_height < face_width:
+        coordinate_change = (face_width - face_height) // 2
+        x1 += coordinate_change
+        x2 -= coordinate_change
+    else:
+        coordinate_change = (face_height - face_width) // 2
+        y1 += coordinate_change
+        y2 -= coordinate_change
+    face = cv2.resize(frame[y1:y2, x1:x2], image_size)
+
+    return face
+
+
 def getFaces(
         path, image_size, net, every_ith_frame=1, confidence_threshold=0.5,
-        only_one_face_per_frame=False, remove_outliers=True):
+        remove_outliers=True):
     cap = cv2.VideoCapture(path)
     faces = []
     i_frame = 1
-    first_face_coordinates = []
     if (not cap.isOpened()):
         print("Cannot open video:", path)
         return faces
@@ -112,8 +142,6 @@ def getFaces(
             continue
         else:
             i_frame = 1
-        frame_height = frame.shape[0]
-        frame_width = frame.shape[1]
 
         # Detect faces from frame
         blob = cv2.dnn.blobFromImage(
@@ -122,86 +150,35 @@ def getFaces(
         detections = net.forward()
 
         # Iterate all detections
-        multiple_faces_per_frame = []
-        face_coordinates = []
+        detected_faces_in_frame = 0
         for i in range(detections.shape[2]):
             confidence = detections[0, 0, i, 2]
 
             # Detected face
             if confidence > confidence_threshold:
-                x1 = int(detections[0, 0, i, 3] * frame_width)
-                x2 = int(detections[0, 0, i, 5] * frame_width)
-                y1 = int(detections[0, 0, i, 4] * frame_height)
-                y2 = int(detections[0, 0, i, 6] * frame_height)
+                detected_faces_in_frame += 1
+                face = cropFixedSizedFaceFromCoordinates(
+                    detections, i, frame, image_size)
 
-                # Limit coordinates if they go over frame boundaries
-                x1 = min(np.shape(frame)[1], max(0, x1))
-                x2 = min(np.shape(frame)[1], max(0, x2))
-                y1 = min(np.shape(frame)[0], max(0, y1))
-                y2 = min(np.shape(frame)[0], max(0, y2))
-                face_width = x2 - x1
-                face_height = y2 - y1
+                # Add new detected human in a video/frame or add to existing
+                # lists of detected humans
+                if len(faces) < detected_faces_in_frame:
+                    faces.append([face])
 
-                # Make detected area square
-                if face_height < face_width:
-                    coordinate_change = (face_width - face_height) // 2
-                    x1 += coordinate_change
-                    x2 -= coordinate_change
+                # Only one human in video
+                elif len(faces) == 1:
+                    faces[0].append(face)
+
+                # Multiple humans in video, check which human face is this
                 else:
-                    coordinate_change = (face_height - face_width) // 2
-                    y1 += coordinate_change
-                    y2 -= coordinate_change
-                face = cv2.resize(frame[y1:y2, x1:x2], image_size)
+                    errors = []
+                    for human_faces in faces:
+                        face_mean = np.mean(np.array(human_faces), axis=0)
+                        l1_color_error = np.mean(np.abs(face_mean - face))
+                        errors.append(l1_color_error)
+                    faces[np.argmin(errors)].append(face)
 
-                # Save all faces or only one from each frame
-                if not only_one_face_per_frame:
-                    faces.append(face)
-                else:
-                    multiple_faces_per_frame.append(face)
-                    face_coordinates.append([x1, y1, x2, y2])
-
-        # Add only one face from frame, and should be the same face
-        if only_one_face_per_frame and len(multiple_faces_per_frame) > 0:
-
-            # Add first face from first frame (from which the face was
-            # detected, for example first time detected from frame 5)
-            if len(faces) == 0:
-                x1 = face_coordinates[0][0]
-                y1 = face_coordinates[0][1]
-                x2 = face_coordinates[0][2]
-                y2 = face_coordinates[0][3]
-                faces.append(multiple_faces_per_frame[0])
-                first_face_coordinates = [x1, y1, x2, y2]
-
-            # If frame has multiple detected faces, add the closest
-            # corresponding to the face detected from first frame
-            elif len(multiple_faces_per_frame) > 1:
-                closest_face_index = 0
-                closest_distance = 4000*4000*4
-                x1_a = first_face_coordinates[0]
-                y1_a = first_face_coordinates[1]
-                x2_a = first_face_coordinates[2]
-                y2_a = first_face_coordinates[3]
-                for i in range(len(multiple_faces_per_frame)):
-                    x1_b = face_coordinates[i][0]
-                    y1_b = face_coordinates[i][1]
-                    x2_b = face_coordinates[i][2]
-                    y2_b = face_coordinates[i][3]
-                    face_distance = (
-                        (x1_a - x1_b) ** 2 +
-                        (y1_a - y1_b) ** 2 +
-                        (x2_a - x2_b) ** 2 +
-                        (y2_a - y2_b) ** 2)
-                    if face_distance < closest_distance:
-                        closest_distance = face_distance
-                        closest_face_index = i
-                faces.append(multiple_faces_per_frame[closest_face_index])
-
-            # Add only one detected face, could make errors if video has for
-            # example 2 faces, but sometimes only 1 face is detected
-            else:
-                faces.append(multiple_faces_per_frame[0])
-
+    # Remove outliers from each human faces
     if remove_outliers:
         faces, outliers = removeOutliers(faces)
 
@@ -268,32 +245,50 @@ def lr_schedule(epoch):
     return lr
 
 
-def removeOutliers(faces_in_video, outlier_detection_factor=1.5):
-    # No faces in list
-    if len(faces_in_video) == 0:
-        return [], []
+def removeOutliers(human_faces_in_video, outlier_detection_factor=1.5):
+    def removeOutliersFromHumanFaces(human_faces):
+        # No faces in list
+        if len(human_faces) == 0:
+            return [], []
 
-    # Compute similarity scores
-    faces_array = np.array(faces_in_video)
-    face_mean = np.mean(faces_array, axis=0).astype(np.uint8)
-    similarity_scores = []
-    for i, face in enumerate(faces_in_video):
-        l1_color_error = np.mean(np.abs(face_mean - face))
-        similarity_scores.append(int(l1_color_error))
+        # Compute similarity scores
+        faces_array = np.array(human_faces)
+        face_mean = np.mean(faces_array, axis=0).astype(np.uint8)
+        similarity_scores = []
+        for i, face in enumerate(human_faces):
+            l1_color_error = np.mean(np.abs(face_mean - face))
+            similarity_scores.append(int(l1_color_error))
 
-    # Define outlier threshold
-    similarity_median = np.median(similarity_scores)
-    outlier_threshold = outlier_detection_factor*similarity_median
+        # Define outlier threshold
+        similarity_median = np.median(similarity_scores)
+        outlier_threshold = outlier_detection_factor*similarity_median
+        true_faces = []
+        outliers = []
+
+        # Find outliers and true faces
+        for i, face in enumerate(human_faces):
+            face_similarity_score = similarity_scores[i]
+            if face_similarity_score > outlier_threshold:
+                outliers.append(face)
+            else:
+                true_faces.append(face)
+        return true_faces, outliers
+
     true_faces = []
     outliers = []
+    max_faces_per_human = max(
+        [len(human_faces) for human_faces in human_faces_in_video])
+    for human_faces in human_faces_in_video:
 
-    # Find outliers and true faces
-    for i, face in enumerate(faces_in_video):
-        face_similarity_score = similarity_scores[i]
-        if face_similarity_score > outlier_threshold:
-            outliers.append(face)
+        # Remove outliers from humans that were detected often
+        # (rarely detected humans can be outliers)
+        if len(human_faces) > max_faces_per_human / 2:
+            human_faces, outliers_in_human_faces = \
+                removeOutliersFromHumanFaces(human_faces)
+            true_faces.append(human_faces)
+            outliers.append(outliers_in_human_faces)
         else:
-            true_faces.append(face)
+            outliers.append(human_faces)
 
     return true_faces, outliers
 
