@@ -14,7 +14,6 @@ from main import \
     IMAGE_SIZE, \
     LABELS_PATH, \
     NUMBER_OF_FACES_PER_VIDEO, \
-    ONLY_ONE_FACE_PER_FRAME, \
     RAW_TRAIN_DATA_DIRECTORY, \
     TRAIN_DIRECTORY
 
@@ -23,17 +22,27 @@ TARGET_PATH_FAKE = TRAIN_DIRECTORY + "/fake"
 TARGET_PATH_REAL = TRAIN_DIRECTORY + "/real"
 
 
+def createDataPaths(fake_path, real_path):
+    # Create paths if not existing
+    if not os.path.isdir(fake_path):
+        os.makedirs(fake_path)
+    if not os.path.isdir(real_path):
+        os.makedirs(real_path)
+
+
+def isVideoProcessedPreviously(sample_file_name):
+    name_and_ending = sample_file_name.split('.')
+    video_0_name = "{}_0.{}".format(name_and_ending[0], name_and_ending[1])
+    return os.path.exists(TARGET_PATH_FAKE + '/' + video_0_name) or \
+        os.path.exists(TARGET_PATH_REAL + '/' + video_0_name)
+
+
 def createTrainData(print_time=True):
     t_start_program = time.time()
     labels = loadLabels()
     net = cv2.dnn.readNetFromCaffe(
         FACE_DETECTION_CONFIG_FILE, FACE_DETECTION_MODEL_FILE)
-
-    # Create paths if not existing
-    if not os.path.isdir(TARGET_PATH_FAKE):
-        os.makedirs(TARGET_PATH_FAKE)
-    if not os.path.isdir(TARGET_PATH_REAL):
-        os.makedirs(TARGET_PATH_REAL)
+    createDataPaths(TARGET_PATH_FAKE, TARGET_PATH_REAL)
 
     # Iterate training videos
     number_of_videos = len(os.listdir(RAW_TRAIN_DATA_DIRECTORY))
@@ -42,8 +51,7 @@ def createTrainData(print_time=True):
         sample_file_name = "{}.png".format(file_name.split('.')[0])
 
         # Skip video face cropping if it is done in previous session
-        if os.path.exists(TARGET_PATH_FAKE + '/' + sample_file_name) or \
-                os.path.exists(TARGET_PATH_REAL + '/' + sample_file_name):
+        if isVideoProcessedPreviously(sample_file_name):
             print((
                 "Skipping video '{}'. It is processed in the previous " +
                 "session.").format(file_name))
@@ -51,53 +59,52 @@ def createTrainData(print_time=True):
 
         # Crop faces from train video
         t_start_video = time.time()
-        faces_in_video = getFaces(
+        humans_in_video = getFaces(
             RAW_TRAIN_DATA_DIRECTORY + '/' + file_name, IMAGE_SIZE, net,
-            EVERY_ITH_FRAME, only_one_face_per_frame=ONLY_ONE_FACE_PER_FRAME)
+            EVERY_ITH_FRAME)
 
-        # Not enough detected faces, lower confidence
-        if len(faces_in_video) < NUMBER_OF_FACES_PER_VIDEO:
-            print((
-                "Too few detected faces, lowering confidence, video: " +
-                "{}/{}, {}").format(i+1, number_of_videos, file_name))
-            faces_in_video = getFaces(
-                RAW_TRAIN_DATA_DIRECTORY + '/' + file_name, IMAGE_SIZE, net,
-                EVERY_ITH_FRAME, confidence_threshold=0.4,
-                only_one_face_per_frame=ONLY_ONE_FACE_PER_FRAME)
+        for j, human_faces in enumerate(humans_in_video):
 
-        # Don't take this video if not enough detected faces
-        if NUMBER_OF_FACES_PER_VIDEO > len(faces_in_video):
-            print((
-                "No saved faces from video: {}. " +
-                "Number of detected faces: {}").format(
-                    file_name, len(faces_in_video)))
-            continue
+            # Don't take this video/human_faces if not enough detected faces
+            if NUMBER_OF_FACES_PER_VIDEO > len(human_faces):
+                print((
+                    "No saved faces from video: {}. " +
+                    "Number of detected faces: {}").format(
+                        file_name, len(human_faces)))
+                continue
 
-        # Pick random faces
-        random_face_indices = sorted(random.sample(
-            range(len(faces_in_video)), NUMBER_OF_FACES_PER_VIDEO))
-        picked_faces = [
-            face for j, face in enumerate(faces_in_video)
-            if j in random_face_indices]
-        t_faces_loaded = time.time()
-        faces_loading_time = round(t_faces_loaded - t_start_video, 2)
-        total_spent_time = int((t_faces_loaded - t_start_program) / 60)
+            # Pick random faces
+            random_face_indices = sorted(random.sample(
+                range(len(human_faces)), NUMBER_OF_FACES_PER_VIDEO))
+            picked_faces = [
+                face for k, face in enumerate(human_faces)
+                if k in random_face_indices]
 
-        # Save faces
-        path = TARGET_PATH_FAKE
-        if labels[i]:
-            path = TARGET_PATH_REAL
+            # Save faces
+            path = TARGET_PATH_FAKE
+            if labels[i]:
+                path = TARGET_PATH_REAL
 
-        # Horizontally concatenate faces
-        sample_image = cv2.hconcat(picked_faces)
-        cv2.imwrite(path + '/' + sample_file_name, cv2.hconcat(picked_faces))
+            # Horizontally concatenate faces
+            sample_image = cv2.hconcat(picked_faces)
+            sample_file_name_with_index = "{}_{}.{}".format(
+                sample_file_name.split('.')[0], j,
+                sample_file_name.split('.')[1])
+            cv2.imwrite(
+                "{}/{}".format(path, sample_file_name_with_index),
+                cv2.hconcat(picked_faces))
 
         # Print processing times
         if print_time:
+            t_faces_loaded = time.time()
+            faces_loading_time = round(t_faces_loaded - t_start_video, 2)
+            total_spent_time = int((t_faces_loaded - t_start_program) / 60)
+            number_of_faces = sum(
+                [len(human_faces) for human_faces in humans_in_video])
             print((
                 "Video: {:5}/{}, {:20}. Number of faces: {:5}. " +
                 "Cropping faces time: {:7}s. Total time: {:4}min").format(
-                    i+1, number_of_videos, file_name, len(faces_in_video),
+                    i+1, number_of_videos, file_name, number_of_faces,
                     faces_loading_time, total_spent_time))
         else:
             print("Video: {}/{}".format(i+1, number_of_videos))

@@ -275,9 +275,9 @@ def removeOutliers(human_faces_in_video, outlier_detection_factor=1.5):
 
     true_faces = []
     outliers = []
-    max_faces_per_human = max(
-        [len(human_faces) for human_faces in human_faces_in_video])
     for human_faces in human_faces_in_video:
+        max_faces_per_human = max(
+            [len(human_faces) for human_faces in human_faces_in_video])
 
         # Remove outliers from humans that were detected often
         # (rarely detected humans can be outliers)
