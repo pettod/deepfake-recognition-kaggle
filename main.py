@@ -220,10 +220,8 @@ def getBatchGenerator(data_directory, image_size, batch_size):
     # Remove horizontal concatenation and stack faces in channel dimesion
     while True:
         video_faces, labels = batches.next()
-        batch_samples = []
-        for i in range(len(video_faces)):
-            batch_samples.append(stackFacesFromSample(
-                video_faces[i], image_size))
+        batch_samples = [
+            stackFacesFromSample(sample, image_size) for sample in video_faces]
         yield np.array(batch_samples), labels
 
 
