@@ -19,8 +19,7 @@ if __name__ == "__main__":
     net = cv2.dnn.readNetFromCaffe(CONFIG_FILE, MODEL_FILE)
     t_start_detect_faces = time.time()
     faces_in_video = getFaces(
-        VIDEO_PATH, IMAGE_SIZE, net, EVERY_ITH_FRAME,
-        only_one_face_per_frame=False, remove_outliers=False)
+        VIDEO_PATH, IMAGE_SIZE, net, EVERY_ITH_FRAME, remove_outliers=False)
     face_detection_time = round(time.time() - t_start_detect_faces, 2)
     """
     # Remove outliers
@@ -38,10 +37,12 @@ if __name__ == "__main__":
     true_faces, outliers = removeOutliers(faces_in_video)
     for i in range(max(len(true_faces), len(outliers))):
         if i < len(true_faces):
-            h_stacked_true_faces = np.hstack(true_faces[i])
-            cv2.imshow("true_faces", h_stacked_true_faces)
+            if len(true_faces[i]) > 0:
+                h_stacked_true_faces = np.hstack(true_faces[i])
+                cv2.imshow("true_faces", h_stacked_true_faces)
         if i < len(outliers):
-            h_stacked_outliers = np.hstack(outliers[i])
-            cv2.imshow("outliers", h_stacked_outliers)
+            if len(outliers[i]) > 0:
+                h_stacked_outliers = np.hstack(outliers[i])
+                cv2.imshow("outliers", h_stacked_outliers)
         cv2.waitKey(0)
         cv2.destroyAllWindows()

@@ -22,7 +22,6 @@ EVERY_ITH_FRAME = 5
 IMAGE_SIZE = (224, 224)
 NUMBER_OF_FACES_PER_VIDEO = 10
 NUMBER_OF_CNN_LAYERS = 56
-ONLY_ONE_FACE_PER_FRAME = True
 
 # Training and testing paths
 CNN_MODEL_FILE_NAME = "resnet{}_best.h5".format(NUMBER_OF_CNN_LAYERS)
@@ -452,51 +451,47 @@ def test(print_time=True):
 
             # Crop faces from test video
             t_start_video = time.time()
-            faces_in_video = getFaces(
+            humans_in_video = getFaces(
                 TEST_DATA_DIRECTORY + '/' + file_name, IMAGE_SIZE, net,
-                EVERY_ITH_FRAME,
-                only_one_face_per_frame=ONLY_ONE_FACE_PER_FRAME)
-
-            # Not enough detected faces, lower confidence
-            if len(faces_in_video) < NUMBER_OF_FACES_PER_VIDEO:
-                print((
-                    "Too few detected faces, lowering confidence, video: " +
-                    "{}/{}, {}").format(i+1, number_of_videos, file_name))
-                faces_in_video = getFaces(
-                    TEST_DATA_DIRECTORY + '/' + file_name, IMAGE_SIZE, net,
-                    EVERY_ITH_FRAME, confidence_threshold=0.4,
-                    only_one_face_per_frame=ONLY_ONE_FACE_PER_FRAME)
+                EVERY_ITH_FRAME)
             faces_loading_time = round(time.time() - t_start_video, 2)
 
-            # Predict score for each stack of face
+            # Loop each human's faces
             predictions = []
-            t_start_predicting = time.time()
-            gray_faces = list(np.mean(np.array(faces_in_video), axis=-1))
-            number_of_samples = int(
-                len(gray_faces) / NUMBER_OF_FACES_PER_VIDEO)
+            for human_faces in humans_in_video:
 
-            # Create samples by taking random faces
-            for j in range(number_of_samples):
-                random_face_indices = sorted(random.sample(
-                    range(len(gray_faces)), NUMBER_OF_FACES_PER_VIDEO))
-                picked_faces = []
-                for k in reversed(random_face_indices):
-                    picked_faces.append(gray_faces[k])
-                    gray_faces.pop(k)
-                picked_faces = np.moveaxis(np.array(picked_faces), 0, -1)
-                sample = np.expand_dims(picked_faces, axis=0)
-                predictions.append(model.predict(sample)[0])
-            t_video_processed = time.time()
-            prediction_time = round(t_video_processed - t_start_predicting, 2)
-            total_spent_time = int((t_video_processed - t_start_program) / 60)
+                # Predict score for each stack of face
+                t_start_predicting = time.time()
+                gray_faces = list(np.mean(np.array(human_faces), axis=-1))
+                number_of_samples = int(
+                    len(gray_faces) / NUMBER_OF_FACES_PER_VIDEO)
+
+                # Create samples by taking random faces
+                for j in range(number_of_samples):
+                    random_face_indices = sorted(random.sample(
+                        range(len(gray_faces)), NUMBER_OF_FACES_PER_VIDEO))
+                    picked_faces = []
+                    for k in reversed(random_face_indices):
+                        picked_faces.append(gray_faces[k])
+                        gray_faces.pop(k)
+                    picked_faces = np.moveaxis(np.array(picked_faces), 0, -1)
+                    sample = np.expand_dims(picked_faces, axis=0)
+                    predictions.append(model.predict(sample)[0])
+                t_video_processed = time.time()
+                prediction_time = round(
+                    t_video_processed - t_start_predicting, 2)
+                total_spent_time = int(
+                    (t_video_processed - t_start_program) / 60)
 
             # Print processing times
             if print_time:
+                number_of_faces = sum(
+                    [len(human_faces) for human_faces in humans_in_video])
                 print((
                     "Video: {:5}/{}, {:20}. Number of faces: {:5}. " +
                     "Cropping faces time: {:7}s. Prediction time: {:6}s. " +
                     "Total time: {:4}min").format(
-                        i+1, number_of_videos, file_name, len(faces_in_video),
+                        i+1, number_of_videos, file_name, number_of_faces,
                         faces_loading_time, prediction_time, total_spent_time))
             else:
                 print("Video: {}/{}".format(i+1, number_of_videos))
@@ -513,6 +508,8 @@ def test(print_time=True):
                     else:
                         final_scores.append(real_score)
                 video_score = np.mean(np.array(final_scores))
+
+        # Handle unexpected exceptions, give score 0.5
         except Exception as e:
             print("Exception thrown, video: {}/{}, {}".format(
                 i+1, number_of_videos, file_name))
