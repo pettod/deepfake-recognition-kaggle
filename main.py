@@ -1,9 +1,10 @@
 import cv2
 import json
 import keras
+from keras.applications import InceptionResNetV2
 from keras.callbacks import EarlyStopping, ModelCheckpoint
-from keras.layers import Dense, Conv2D, BatchNormalization, Activation
-from keras.layers import AveragePooling2D, Input, Flatten
+from keras.layers import Dense, Conv2D, BatchNormalization, Activation, \
+    AveragePooling2D, Input, Flatten, GlobalAveragePooling2D
 from keras.models import Model, load_model
 from keras.optimizers import Adam
 from keras.regularizers import l2
@@ -199,6 +200,17 @@ def getBatchGenerator(data_directory, image_size, batch_size):
         batch_samples = [
             stackFacesFromSample(sample, image_size) for sample in video_faces]
         yield np.array(batch_samples), labels
+
+
+def getModel(input_shape):
+    model = InceptionResNetV2(
+        include_top=False, weights=None, input_shape=input_shape, classes=2)
+    for layer in model.layers:
+        layer.trainable = False
+    last_layer = model.layers[-1].output
+    pool_layer = GlobalAveragePooling2D()(last_layer)
+    output_layer = Dense(2, activation="softmax")(pool_layer)
+    return Model(model.input, output_layer)
 
 
 def getNumberOfSteps(data_directory, batch_size):
@@ -542,10 +554,9 @@ def train():
 
         # Create model
         input_shape = (IMAGE_SIZE[0], IMAGE_SIZE[1], NUMBER_OF_FACES_PER_VIDEO)
-        model = resnet_v1(
-            input_shape, depth=NUMBER_OF_CNN_LAYERS, num_classes=2)
+        model = getModel(input_shape)
         model.compile(
-            optimizer=Adam(lr=0.0001), loss="binary_crossentropy",
+            optimizer=Adam(lr=1e-4), loss="binary_crossentropy",
             metrics=["accuracy"])
 
         # Fit data
