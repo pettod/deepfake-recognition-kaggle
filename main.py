@@ -185,7 +185,7 @@ def getFaces(
     return faces
 
 
-def getBatchGenerator(data_directory, image_size, batch_size):
+def getBatchGenerator(data_directory, image_size, batch_size, normalize=True):
     read_image_size = (
         image_size[0],
         image_size[1] * NUMBER_OF_FACES_PER_VIDEO)
@@ -197,9 +197,12 @@ def getBatchGenerator(data_directory, image_size, batch_size):
     # Remove horizontal concatenation and stack faces in channel dimesion
     while True:
         video_faces, labels = batches.next()
-        batch_samples = [
-            stackFacesFromSample(sample, image_size) for sample in video_faces]
-        yield np.array(batch_samples), labels
+        batch_samples = np.array([
+            stackFacesFromSample(sample, image_size)
+            for sample in video_faces])
+        if normalize:
+            batch_samples = normalizeArray(batch_samples)
+        yield batch_samples, labels
 
 
 def getModel(input_shape):
@@ -254,6 +257,10 @@ def lr_schedule(epoch):
         lr *= 1e-1
     print('Learning rate: ', lr)
     return lr
+
+
+def normalizeArray(sample):
+    return sample / 255 - 0.5
 
 
 def removeOutliers(human_faces_in_video, outlier_detection_factor=1.5):
@@ -487,7 +494,8 @@ def test(print_time=True):
                         picked_faces.append(gray_faces[k])
                         gray_faces.pop(k)
                     picked_faces = np.moveaxis(np.array(picked_faces), 0, -1)
-                    sample = np.expand_dims(picked_faces, axis=0)
+                    sample = normalizeArray(np.expand_dims(
+                        picked_faces, axis=0))
                     predictions.append(model.predict(sample)[0])
                 t_video_processed = time.time()
                 prediction_time = round(
