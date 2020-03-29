@@ -21,20 +21,10 @@ if __name__ == "__main__":
     faces_in_video = getFaces(
         VIDEO_PATH, IMAGE_SIZE, net, EVERY_ITH_FRAME, remove_outliers=False)
     face_detection_time = round(time.time() - t_start_detect_faces, 2)
-    """
-    # Remove outliers
-    t_start_removing_outliers = time.time()
-    true_faces, outliers = removeOutliers(faces_in_video)
-    face_outlier_removal_time = round(
-        time.time() - t_start_removing_outliers, 2)
-    print((
-        "Number of detected faces: {}. Face detection time: {}s. " +
-        "Remove outliers time: {}s").format(
-            len(faces_in_video), face_detection_time,
-            face_outlier_removal_time))
-    """
+
     # Show outliers
-    true_faces, outliers = removeOutliers(faces_in_video)
+    true_faces, outliers = removeOutliers(
+        faces_in_video, outlier_detection_factor=1.5)
     for i in range(max(len(true_faces), len(outliers))):
         if i < len(true_faces):
             if len(true_faces[i]) > 0:
